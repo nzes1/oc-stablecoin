@@ -1,0 +1,3 @@
+@openzeppelin/contracts@5.1.0/=lib/openzeppelin-contracts/contracts/
+@chainlink/contracts@v1.3.0/=lib/chainlink-brownie-contracts/contracts/
+forge-std=lib/forge-std/src/

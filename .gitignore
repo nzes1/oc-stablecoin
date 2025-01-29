@@ -12,3 +12,16 @@ docs/
 
 # Dotenv file
 .env
+
+# .vscode
+.vscode/
+.github/
+
+#keystore password for account nzesi-dev
+.keystore-password
+
+#Others
+.gas-snapshot
+
+# Test coverage
+test-coverage.txt
