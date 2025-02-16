@@ -39,6 +39,11 @@ import {ReentrancyGuard} from "@openzeppelin/contracts@5.1.0/utils/ReentrancyGua
 import {IERC20} from "@openzeppelin/contracts@5.1.0/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts@v1.3.0/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {OraclesLibrary} from "./libraries/OraclesLibrary.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
+import {CollateralManager} from "./CollateralManager.sol";
+import {Structs} from "./Structs.sol";
+import {Storage} from "./Storage.sol";
 
 /**
  * @title DSCEngine
@@ -49,11 +54,15 @@ import {OraclesLibrary} from "./libraries/OraclesLibrary.sol";
  * @dev For a user to be above the liquidation threshold, they have to maintain an overcollateralization
  * of 200%.
  */
-contract DSCEngine is IDSCEngine, ReentrancyGuard {
+contract DSCEngine is Storage, Ownable, ReentrancyGuard, CollateralManager {
     /*//////////////////////////////////////////////////////////////
                                  TYPES
     //////////////////////////////////////////////////////////////*/
     using OraclesLibrary for AggregatorV3Interface;
+
+    /**
+     * @dev Collateral data key parameters
+     */
 
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
@@ -114,6 +123,19 @@ contract DSCEngine is IDSCEngine, ReentrancyGuard {
      */
     mapping(address account => uint256 DSCBalance) private s_DSCMinted;
 
+    /**
+     * @dev Store vaults by collateral type and owner of the vault.
+     */
+
+    /**
+     * @dev Total DSC supply in circulation
+     */
+    uint256 private s_totalDSCDebt;
+
+    /**
+     * @dev Freeze system flag.
+     */
+    bool private live;
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -144,6 +166,10 @@ contract DSCEngine is IDSCEngine, ReentrancyGuard {
     error DSCEngine__LiquidationHasNotImprovedHealthFactor();
     error DSCEngine__ZeroAmountNotAllowed();
     error DSCEngine__AccountNotLiquidatable();
+    error DSCEngine__CollateralConfigurationAlreadySet(bytes32 collateralId);
+    error DSCEngine__CollateralConfigurationCannotBeRemovedWithOutstandingDebt(
+        uint256 debt
+    );
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -186,7 +212,7 @@ contract DSCEngine is IDSCEngine, ReentrancyGuard {
         address[] memory tokenAddresses,
         address[] memory priceFeedsAddresses,
         address DSCTokenAddress
-    ) {
+    ) Ownable(msg.sender) {
         if (tokenAddresses.length != priceFeedsAddresses.length) {
             revert DSCEngine__CollateralTokensAddressesAndPriceFeedsAddressesLengthMismatch();
         }
@@ -210,16 +236,16 @@ contract DSCEngine is IDSCEngine, ReentrancyGuard {
      * prior to initiating the deposit.
      * @dev The amount the user deposits has to be more than zero. The token also has to be
      * allowed as collateral. The function reverts otherwise.
-     * @param tokenAddr The address of the collateral token.
-     * @param collateralAmount The amount of collateral tokens to deposit.
+     * @param collId The address of the collateral token.
+     * @param collAmount The amount of collateral tokens to deposit.
      * @param DSCAmount The amount of DSC tokens to mint.
      */
     function depositCollateralAndMintDSC(
-        address tokenAddr,
-        uint256 collateralAmount,
+        bytes32 collId,
+        uint256 collAmount,
         uint256 DSCAmount
     ) external {
-        depositCollateral(tokenAddr, collateralAmount);
+        depositCollateral(collId, collAmount);
         mintDSC(DSCAmount);
     }
 
@@ -292,7 +318,7 @@ contract DSCEngine is IDSCEngine, ReentrancyGuard {
          * to be successful is calculated as below:
          * Total Collateral Required = Collateral Redeemed+Bonus Collateral
          * Total Collateral Required = (DSCDebtToCover / Price of Collateral Token in USD) +
-         * ((DSCDebtToCover / Price of Collateral Token in USD) * (LIQUIDATOR_BONUS / LIQUIATION_PRECISION))
+         * ((DSCDebtToCover / Price of Collateral Token in USD) * (LIQUIDATOR_BONUS / LIQUIDATION_PRECISION))
          * @
          */
         (bool liquidatable, uint256 bonusAvailable) = _checkCollateral(
@@ -355,32 +381,46 @@ contract DSCEngine is IDSCEngine, ReentrancyGuard {
         (DSCBal, totalCollateralValueInUsd) = _getAccountInfo(account);
     }
 
-    /**
-     * @notice The function allows users to deposit collateral tokens.
-     * @dev The user has to approve the transfer of the collateral tokens to this contract
-     * prior to initiating the deposit.
-     * @dev The amount the user deposits has to be more than zero. The token also has to be
-     * allowed as collateral. The function reverts otherwise.
-     * @param tokenAddr The address of the collateral token.
-     * @param amount The amount of collateral tokens to deposit.
-     */
+    // /**
+    //  * @notice The function allows users to deposit collateral tokens.
+    //  * @dev The user has to approve the transfer of the collateral tokens to this contract
+    //  * prior to initiating the deposit.
+    //  * @dev The amount the user deposits has to be more than zero. The token also has to be
+    //  * allowed as collateral. The function reverts otherwise.
+    //  * @param tokenAddr The address of the collateral token.
+    //  * @param amount The amount of collateral tokens to deposit.
+    //  */
+    // function depositCollateral(
+    //     address tokenAddr,
+    //     uint256 amount
+    // ) public moreThanZero(amount) isAllowedToken(tokenAddr) nonReentrant {
+    //     s_collateralDeposits[msg.sender][tokenAddr] += amount;
+
+    //     emit CollateralDeposited(msg.sender, tokenAddr, amount);
+
+    //     bool success = IERC20(tokenAddr).transferFrom(
+    //         msg.sender,
+    //         address(this),
+    //         amount
+    //     );
+
+    //     if (!success) {
+    //         revert DSCEngine__CollateralTransferFailed();
+    //     }
+    // }
+
     function depositCollateral(
-        address tokenAddr,
+        bytes32 collId,
         uint256 amount
-    ) public moreThanZero(amount) isAllowedToken(tokenAddr) nonReentrant {
-        s_collateralDeposits[msg.sender][tokenAddr] += amount;
+    ) public nonReentrant {
+        addCollateral(collId, amount);
+    }
 
-        emit CollateralDeposited(msg.sender, tokenAddr, amount);
-
-        bool success = IERC20(tokenAddr).transferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
-
-        if (!success) {
-            revert DSCEngine__CollateralTransferFailed();
-        }
+    // need inheritance to avoid change of msg.sender
+    function depositEtherCollateralAndMintDSC(
+        uint256 DSCAmount
+    ) external payable {
+        addEtherCollateral();
     }
 
     /**
@@ -402,6 +442,16 @@ contract DSCEngine is IDSCEngine, ReentrancyGuard {
         if (!mintStatus) {
             revert DSCEngine__MintingDSCFailed();
         }
+    }
+
+    function mintDSC2(
+        bytes32 collId,
+        uint256 DSCAmount
+    ) public moreThanZero(DSCAmount) nonReentrant {
+        // need coll for that vault
+        // need balance for the coll which is 150% value of mint amount.
+        // update+ vault
+        // send dsc to user
     }
 
     /**
@@ -676,5 +726,77 @@ contract DSCEngine is IDSCEngine, ReentrancyGuard {
         } else {
             return (true, (totalRequiredCollateral - collateralWithoutBonus));
         }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                       COLLATERAL CONFIGURATIONS
+    //////////////////////////////////////////////////////////////*/
+    function configureCollateral(
+        bytes32 collateralId,
+        address tokenAddr,
+        uint256 interestFee,
+        uint256 liquidationThresholdPrice,
+        uint256 minDebtAllowed,
+        uint256 liquidationRatio,
+        address priceFeed,
+        uint8 tknDecimals
+    ) external onlyOwner {
+        // Only configure supported collateral if not previously set
+        if (s_collaterals[collateralId].tokenAddr != address(0)) {
+            revert DSCEngine__CollateralConfigurationAlreadySet(collateralId);
+        }
+        s_collateralIds.push(collateralId);
+        s_collaterals[collateralId].tokenAddr = tokenAddr;
+        s_collaterals[collateralId].interestFee = interestFee;
+        s_collaterals[collateralId]
+            .liquidationThresholdPrice = liquidationThresholdPrice;
+        s_collaterals[collateralId].minDebtAllowed = minDebtAllowed;
+        s_collaterals[collateralId].liquidationRatio = liquidationRatio;
+        s_collaterals[collateralId].priceFeedAddr = priceFeed;
+
+        s_tokenDecimals[collateralId] = tknDecimals; // should it be removed also at below??
+    }
+
+    function removeCollateralConfiguration(
+        bytes32 collateralId
+    ) external onlyOwner {
+        uint256 outstandingDebt = s_collaterals[collateralId]
+            .totalNormalizedDebt;
+        if (outstandingDebt > 0) {
+            revert DSCEngine__CollateralConfigurationCannotBeRemovedWithOutstandingDebt(
+                outstandingDebt
+            );
+        }
+
+        delete s_collaterals[collateralId];
+
+        // Gas intensive removal from array of collateral Ids
+        for (uint256 k = 0; k < s_collateralIds.length; k++) {
+            if (s_collateralIds[k] == collateralId) {
+                s_collateralIds[k] = bytes32(s_collateralIds.length - 1);
+                s_collateralIds.pop();
+                break;
+            }
+        }
+    }
+
+    function getCollateralSettings(
+        bytes32 collateralId
+    ) external view returns (Structs.CollateralConfig memory) {
+        return s_collaterals[collateralId];
+    }
+
+    function getAllowedCollateralIds()
+        external
+        view
+        returns (bytes32[] memory)
+    {
+        return s_collateralIds;
+    }
+
+    function getCollateralAddress(
+        bytes32 collId
+    ) external view returns (address) {
+        return s_collaterals[collId].tokenAddr;
     }
 }

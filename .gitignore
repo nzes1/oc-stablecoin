@@ -16,7 +16,6 @@ docs/
 # .vscode
 .vscode/
 .github/
-.gitmodules
 
 #keystore password for account nzesi-dev
 .keystore-password

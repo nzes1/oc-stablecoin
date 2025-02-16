@@ -33,6 +33,7 @@ pragma solidity 0.8.24;
 
 import {ERC20Burnable, ERC20} from "@openzeppelin/contracts@5.1.0/token/ERC20/extensions/ERC20Burnable.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ERC20Permit} from "@openzeppelin/contracts@5.1.0/token/ERC20/extensions/ERC20Permit.sol";
 
 /**
  * @title DecentralizedStableCoin
@@ -49,7 +50,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  * @dev Openzeppelin's Ownable Access Control utility is used to restrict minting
  * and burning to the owner of the contract - which is the DSCEngine contract.
  */
-contract DecentralizedStableCoin is ERC20Burnable, Ownable {
+contract DecentralizedStableCoin is Ownable, ERC20Burnable, ERC20Permit {
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
@@ -75,8 +76,14 @@ contract DecentralizedStableCoin is ERC20Burnable, Ownable {
     /**
      * @notice The constructor initializes the ERC20 token with the name
      * `DecentralizedStableCoin` and the token symbol `DSC`.
+     *  The same name is used to initialize the ERC20Permit which will be used
+     * as the domain separator `name` field value for EIP712.
      */
-    constructor() ERC20("DecentralizedStableCoin", "DSC") Ownable(msg.sender) {}
+    constructor()
+        Ownable(msg.sender)
+        ERC20("DecentralizedStableCoin", "DSC")
+        ERC20Permit("DecentralizedStableCoin")
+    {}
 
     /*//////////////////////////////////////////////////////////////
                                FUNCTIONS
@@ -135,5 +142,14 @@ contract DecentralizedStableCoin is ERC20Burnable, Ownable {
         /// Mint the tokens
         _mint(account, mintAmt);
         return true;
+    }
+
+    // Prevent users from bypassing the access control of burn() and use the burnFrom()
+    // of the ERC20Burnable to burn tokens
+    function burnFrom(
+        address account,
+        uint256 value
+    ) public override onlyOwner {
+        super.burnFrom(account, value);
     }
 }
