@@ -82,7 +82,7 @@ contract DSCEngine is Storage, Ownable, ReentrancyGuard, CollateralManager {
     /**
      * @dev The precision factor for the liquidation threshold.
      */
-    uint256 private constant LIQUIDATION_PRECISION = 100;
+    // uint256 private constant LIQUIDATION_PRECISION = 100;
 
     /**
      * @dev The liquidator 10% bonus for liquidating an account.
@@ -93,7 +93,7 @@ contract DSCEngine is Storage, Ownable, ReentrancyGuard, CollateralManager {
      * @dev The minimum health factor allowed scaled by 1e18 since
      * the health factor is scaled up by 1e18 also.
      */
-    uint256 private constant MIN_HEALTH_FACTOR = 1e18;
+    // uint256 private constant MIN_HEALTH_FACTOR = 1e18;
 
     /**
      * @dev The address of the DSC token
@@ -735,7 +735,7 @@ contract DSCEngine is Storage, Ownable, ReentrancyGuard, CollateralManager {
         bytes32 collateralId,
         address tokenAddr,
         uint256 interestFee,
-        uint256 liquidationThresholdPrice,
+        uint256 liquidationThresholdPercentage,
         uint256 minDebtAllowed,
         uint256 liquidationRatio,
         address priceFeed,
@@ -749,7 +749,7 @@ contract DSCEngine is Storage, Ownable, ReentrancyGuard, CollateralManager {
         s_collaterals[collateralId].tokenAddr = tokenAddr;
         s_collaterals[collateralId].interestFee = interestFee;
         s_collaterals[collateralId]
-            .liquidationThresholdPrice = liquidationThresholdPrice;
+            .liquidationThresholdPercentage = liquidationThresholdPercentage;
         s_collaterals[collateralId].minDebtAllowed = minDebtAllowed;
         s_collaterals[collateralId].liquidationRatio = liquidationRatio;
         s_collaterals[collateralId].priceFeedAddr = priceFeed;

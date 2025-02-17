@@ -29,7 +29,7 @@ contract DevTest is Test {
         bytes32 collateralId = "ETHC";
         address tokenAddr = address(22);
         uint256 interestFee = 23;
-        uint256 liquidationThresholdPrice = 500;
+        uint256 liquidationThresholdPercentage = 500;
         uint256 minDebtAllowed = 100;
         uint256 liquidationRatio = 150;
 
@@ -39,7 +39,7 @@ contract DevTest is Test {
             collateralId,
             tokenAddr,
             interestFee,
-            liquidationThresholdPrice,
+            liquidationThresholdPercentage,
             minDebtAllowed,
             liquidationRatio
         );

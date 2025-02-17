@@ -7,7 +7,7 @@ library Structs {
         address tokenAddr;
         uint256 totalNormalizedDebt;
         uint256 interestFee;
-        uint256 liquidationThresholdPrice;
+        uint256 liquidationThresholdPercentage;
         uint256 minDebtAllowed;
         uint256 liquidationRatio;
         address priceFeedAddr;

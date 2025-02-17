@@ -48,7 +48,7 @@ contract VaultManager is Storage {
         // get coll value and compare to debt
         // ratio should be at minimum the configured liquidation ratio for this coll
 
-        // Balance of locked coll
+        // Balance of DSC debt
         uint256 vaultDebt = s_vaults[collId][owner].dscDebt;
 
         // No debt the vault is infinitely healthy
@@ -57,7 +57,29 @@ contract VaultManager is Storage {
         }
 
         // Get coll value
-        uint256 vaultBalUsd = getVaultCollateralUsdValue(collId, owner);
+        uint256 vaultCollBalUsd = getVaultCollateralUsdValue(collId, owner);
+
+        // HF = ratio of trusted/ backing coll to debt
+        // Needs to be more than minHF which is always 1e18 - the assumption here is that
+        // the ratio of the collateral that the protocol considers as the safety margin or rather
+        // cover of loan is the maximum you can mint dsc. this value will yield a ratio of 1 and
+        // any amounts greater than this max amount breaks the ratio below 1. Minting less than the
+        // max dsc for the locked collateral means hf is above 1 hence healthy.
+        // both have 18 decimals i.e. the coll in usd and DSC
+        // To maintain the decimals for the health factor, then the result needs to be
+        // scaled up with 18 decimals. The ratio automatically  removes the decimals.
+        // SO scalling result up is like (vaultCollBalUsd / vaultDebt) * 18decimals.
+        // But it's always recommended to do multiplication before division so that you
+        // don't lose precision due to division.
+        // so that changes to (vaultCollBalUsd * 18decimals / vaultDebt)
+        uint256 trustedVaultCollUsd = (vaultCollBalUsd *
+            s_collaterals[collId].liquidationThresholdPercentage) /
+            LIQUIDATION_PRECISION;
+
+        uint256 healthFactorRatio = (trustedVaultCollUsd * PRECISION) /
+            vaultDebt;
+
+        return (healthFactor >= MIN_HEALTH_FACTOR, healthFactorRatio);
     }
 
     function getVaultCollateralUsdValue(

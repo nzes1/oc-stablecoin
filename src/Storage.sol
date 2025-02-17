@@ -7,6 +7,9 @@ import {Structs} from "./Structs.sol";
 contract Storage {
     // DSC decimals
     uint8 internal constant DSC_DECIMALS = 18;
+    uint256 internal constant PRECISION = 1e18;
+    uint256 internal constant LIQUIDATION_PRECISION = 100;
+    uint256 internal constant MIN_HEALTH_FACTOR = 1e18;
     // Vaults per owner per collateral
     mapping(bytes32 collateralId => mapping(address owner => Structs.Vault))
         internal s_vaults;
