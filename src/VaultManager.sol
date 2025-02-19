@@ -40,6 +40,18 @@ contract VaultManager is Storage {
         s_vaults[collId][msg.sender].dscDebt += dscAmount;
     }
 
+    function shrinkVault(
+        bytes32 collId,
+        address owner,
+        uint256 collAmount,
+        uint256 DSCAmount
+    ) public {
+        s_collBalances[collId][owner] += collAmount;
+
+        s_vaults[collId][owner].lockedCollateral -= collAmount;
+        s_vaults[collId][owner].dscDebt -= DSCAmount;
+    }
+
     function isVaultHealthy(
         bytes32 collId,
         address owner
@@ -137,6 +149,8 @@ contract VaultManager is Storage {
 
             s_oracleDecimals[collId].cached = true;
             s_oracleDecimals[collId].decimals = oracleDecimals;
+        } else {
+            oracleDecimals = s_oracleDecimals[collId].decimals;
         }
 
         // Scale up if oracle decimals are lower than DSC's 18.

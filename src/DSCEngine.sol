@@ -42,6 +42,7 @@ import {OraclesLibrary} from "./libraries/OraclesLibrary.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {CollateralManager} from "./CollateralManager.sol";
+import {VaultManager} from "./VaultManager.sol";
 import {Structs} from "./Structs.sol";
 import {Storage} from "./Storage.sol";
 
@@ -54,7 +55,13 @@ import {Storage} from "./Storage.sol";
  * @dev For a user to be above the liquidation threshold, they have to maintain an overcollateralization
  * of 200%.
  */
-contract DSCEngine is Storage, Ownable, ReentrancyGuard, CollateralManager {
+contract DSCEngine is
+    Storage,
+    Ownable,
+    ReentrancyGuard,
+    CollateralManager,
+    VaultManager
+{
     /*//////////////////////////////////////////////////////////////
                                  TYPES
     //////////////////////////////////////////////////////////////*/
@@ -246,7 +253,7 @@ contract DSCEngine is Storage, Ownable, ReentrancyGuard, CollateralManager {
         uint256 DSCAmount
     ) external {
         depositCollateral(collId, collAmount);
-        mintDSC(DSCAmount);
+        mintDSC(collId, collAmount, DSCAmount);
     }
 
     /**
@@ -421,37 +428,59 @@ contract DSCEngine is Storage, Ownable, ReentrancyGuard, CollateralManager {
         uint256 DSCAmount
     ) external payable {
         addEtherCollateral();
+        mintDSC("ETH", msg.value, DSCAmount);
     }
 
-    /**
-     * @notice The function mints DSC tokens to a user after depositing collateral.
-     * @dev The function calls the `mint()` function of the DecentralizedStableCoin
-     * token contract to mint the DSC tokens. Only the DSCEngine contract can mint DSC tokens.
-     * @dev The user has to have a health factor greater than the minimum health factor
-     * allowed. The function reverts otherwise.
-     * @param DSCAmountToMint The amount of DSC tokens to mint.
-     */
+    // /**
+    //  * @notice The function mints DSC tokens to a user after depositing collateral.
+    //  * @dev The function calls the `mint()` function of the DecentralizedStableCoin
+    //  * token contract to mint the DSC tokens. Only the DSCEngine contract can mint DSC tokens.
+    //  * @dev The user has to have a health factor greater than the minimum health factor
+    //  * allowed. The function reverts otherwise.
+    //  * @param DSCAmountToMint The amount of DSC tokens to mint.
+    //  */
+    // function mintDSC(
+    //     uint256 DSCAmountToMint
+    // ) public moreThanZero(DSCAmountToMint) nonReentrant {
+    //     s_DSCMinted[msg.sender] += DSCAmountToMint;
+    //     _revertIfHealthFactorIsBelowThreshold(msg.sender);
+
+    //     bool mintStatus = i_DSC.mint(msg.sender, DSCAmountToMint);
+
+    //     if (!mintStatus) {
+    //         revert DSCEngine__MintingDSCFailed();
+    //     }
+    // }
+
     function mintDSC(
-        uint256 DSCAmountToMint
-    ) public moreThanZero(DSCAmountToMint) nonReentrant {
-        s_DSCMinted[msg.sender] += DSCAmountToMint;
-        _revertIfHealthFactorIsBelowThreshold(msg.sender);
-
-        bool mintStatus = i_DSC.mint(msg.sender, DSCAmountToMint);
-
-        if (!mintStatus) {
-            revert DSCEngine__MintingDSCFailed();
-        }
-    }
-
-    function mintDSC2(
         bytes32 collId,
+        uint256 collAmount,
         uint256 DSCAmount
     ) public moreThanZero(DSCAmount) nonReentrant {
         // need coll for that vault
         // need balance for the coll which is 150% value of mint amount.
         // update+ vault
         // send dsc to user
+
+        // increase their debt first
+        createVault(collId, collAmount, DSCAmount);
+
+        // Vault has to be overcollateralized as per the set configs for that collateral
+        (bool healthy, uint256 healthFactor) = isVaultHealthy(
+            collId,
+            msg.sender
+        );
+
+        if (!healthy) {
+            revert DSCEngine__HealthFactorBelowThreshold(healthFactor);
+        }
+
+        // Mint DSC to user address
+        bool mintStatus = i_DSC.mint(msg.sender, DSCAmount);
+
+        if (!mintStatus) {
+            revert DSCEngine__MintingDSCFailed();
+        }
     }
 
     /**
@@ -699,6 +728,27 @@ contract DSCEngine is Storage, Ownable, ReentrancyGuard, CollateralManager {
 
         /// Now DSCEngine contract burns the DSC tokens.
         i_DSC.burn(DSCAmountToBurn);
+    }
+
+    function _burnDSC2(
+        bytes32 collId,
+        uint256 collAmount,
+        uint256 DSCAmount,
+        address burnOnBehalfOf,
+        address burnFrom
+    ) private {
+        // reduce their debt
+        shrinkVault(collId, burnOnBehalfOf, collAmount, DSCAmount);
+
+        // transfer dsc back to the engine.
+        bool success = i_DSC.transferFrom(burnFrom, address(this), DSCAmount);
+
+        if (!success) {
+            revert DSCEngine__BurningDSCFailed();
+        }
+
+        /// Now DSCEngine contract burns the DSC tokens.
+        i_DSC.burn(DSCAmount);
     }
 
     /**
