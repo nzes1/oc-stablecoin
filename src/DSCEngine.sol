@@ -256,25 +256,37 @@ contract DSCEngine is
         mintDSC(collId, collAmount, DSCAmount);
     }
 
-    /**
-     * @notice The function allows users to redeem collateral tokens and burn DSC tokens in
-     * a single transaction.
-     * @dev The user has to burn the DSC tokens before redeeming the collateral tokens.
-     * @param tokenAddr The address of the collateral token.
-     * @param collateralAmount The amount of collateral tokens to redeem.
-     * @param DSCAmountToBurn The amount of DSC tokens to burn.
-     */
-    function redeemCollateralForDSC(
-        address tokenAddr,
-        uint256 collateralAmount,
-        uint256 DSCAmountToBurn
-    ) external {
-        // Burn the DSC before redeeming the collateral.
-        burnDSC(DSCAmountToBurn);
-        redeemCollateral(tokenAddr, collateralAmount);
+    // /**
+    //  * @notice The function allows users to redeem collateral tokens and burn DSC tokens in
+    //  * a single transaction.
+    //  * @dev The user has to burn the DSC tokens before redeeming the collateral tokens.
+    //  * @param tokenAddr The address of the collateral token.
+    //  * @param collateralAmount The amount of collateral tokens to redeem.
+    //  * @param DSCAmountToBurn The amount of DSC tokens to burn.
+    //  */
+    // function redeemCollateralForDSC(
+    //     address tokenAddr,
+    //     uint256 collateralAmount,
+    //     uint256 DSCAmountToBurn
+    // ) external {
+    //     // Burn the DSC before redeeming the collateral.
+    //     burnDSC(DSCAmountToBurn);
+    //     redeemCollateral(tokenAddr, collateralAmount);
 
-        // No need to check health factor here as it is checked in the `redeemCollateral()`
-        /// and the `burnDSC` functions.
+    //     // No need to check health factor here as it is checked in the `redeemCollateral()`
+    //     /// and the `burnDSC` functions.
+    // }
+
+    function redeemCollateralForDSC(
+        bytes32 collId,
+        uint256 collAmount,
+        uint256 DSCAmount
+    ) public {
+        // begin by burning to reduce debt
+        burnDSC(collId, DSCAmount);
+
+        // Then move the collateral specified, but only if hf is not broken
+        redeemCollateral(collId, collAmount);
     }
 
     /**
@@ -348,7 +360,7 @@ contract DSCEngine is
 
         /// Now burning the DSC tokens from the liquidator's account on behalf of the account
         /// which is being liquidated.
-        _burnDSC(DSCDebtToCover, account, msg.sender);
+        //_burnDSC(DSCDebtToCover, account, msg.sender);
 
         /// Make sure liquidation has improved the health factor of the account.
         uint256 endingHealthFactorOfAccount = _healthFactor(account);
@@ -483,31 +495,40 @@ contract DSCEngine is
         }
     }
 
-    /**
-     * @notice The function allows users to redeem/retrieve their collateral tokens.
-     * @param tokenAddr The collateral token address to redeem.
-     * @param amount The amount of collateral to redeem.
-     */
-    function redeemCollateral(
-        address tokenAddr,
-        uint256 amount
-    ) public moreThanZero(amount) nonReentrant {
-        _redeemCollateral(tokenAddr, amount, msg.sender, msg.sender);
-        // Health factor has to be above the threshold after redeeming collateral.
-        _revertIfHealthFactorIsBelowThreshold(msg.sender);
+    // /**
+    //  * @notice The function allows users to redeem/retrieve their collateral tokens.
+    //  * @param tokenAddr The collateral token address to redeem.
+    //  * @param amount The amount of collateral to redeem.
+    //  */
+    // function redeemCollateral(
+    //     address tokenAddr,
+    //     uint256 amount
+    // ) public moreThanZero(amount) nonReentrant {
+    //     _redeemCollateral(tokenAddr, amount, msg.sender, msg.sender);
+    //     // Health factor has to be above the threshold after redeeming collateral.
+    //     _revertIfHealthFactorIsBelowThreshold(msg.sender);
+    // }
+
+    function redeemCollateral(bytes32 collId, uint256 collAmount) public {
+        _redeemVaultCollateral(collId, collAmount);
     }
 
-    /**
-     * @notice The function allows users to burn DSC tokens.
-     * @dev The function calls the `burn()` function of the DecentralizedStableCoin
-     * token contract to burn the DSC tokens. Only the DSCEngine contract can burn DSC tokens.
-     * @param amount The amount of DSC tokens to burn.
-     */
-    function burnDSC(uint256 amount) public moreThanZero(amount) {
-        _burnDSC(amount, msg.sender, msg.sender);
+    // /**
+    //  * @notice The function allows users to burn DSC tokens.
+    //  * @dev The function calls the `burn()` function of the DecentralizedStableCoin
+    //  * token contract to burn the DSC tokens. Only the DSCEngine contract can burn DSC tokens.
+    //  * @param amount The amount of DSC tokens to burn.
+    //  */
+    // function burnDSC(uint256 amount) public moreThanZero(amount) {
+    //     _burnDSC(amount, msg.sender, msg.sender);
 
-        // Need to check if this will ever hit.
-        _revertIfHealthFactorIsBelowThreshold(msg.sender);
+    //     // Need to check if this will ever hit.
+    //     _revertIfHealthFactorIsBelowThreshold(msg.sender);
+    // }
+
+    // no health check!!!
+    function burnDSC(bytes32 collId, uint256 DSCAmount) public {
+        _burnDSC(collId, DSCAmount);
     }
 
     /**
@@ -696,52 +717,67 @@ contract DSCEngine is
         }
     }
 
-    /**
-     * @notice The internal function to burn DSC tokens.
-     * @dev This low-level function does not check the health factor. The calling function
-     * has to check the health factor after calling this function and revert if the health factor
-     *
-     * @param DSCAmountToBurn The amount of DSC tokens to burn.
-     * @param burnOnBehalfOf The address to burn the DSC tokens on behalf of.
-     * @param burnDSCFrom The address to burn the DSC tokens from.
-     */
-    function _burnDSC(
-        uint256 DSCAmountToBurn,
-        address burnOnBehalfOf,
-        address burnDSCFrom
-    ) private {
-        /// Incase of liquidation, the liquidators burn DSC Amount gets deducted
-        /// from the user who's being liquidated so that they may not claim the DSC after liquidation.
-        s_DSCMinted[burnOnBehalfOf] -= DSCAmountToBurn;
+    function _redeemVaultCollateral(
+        bytes32 collId,
+        uint256 collAmount
+    ) internal {
+        // shrinking shouldn't affect oc ratio
+        shrinkVaultCollateral(collId, collAmount);
 
-        /// Transfer the DSC from the user (or liquidator incase of a liquidation flow)
-        /// to the DSCEngine contract before burning.
-        bool success = i_DSC.transferFrom(
-            burnDSCFrom,
-            address(this),
-            DSCAmountToBurn
-        );
+        (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
 
-        if (!success) {
-            revert DSCEngine__BurningDSCFailed();
+        if (!healthy) {
+            revert DSCEngine__HealthFactorBelowThreshold(hf);
         }
 
-        /// Now DSCEngine contract burns the DSC tokens.
-        i_DSC.burn(DSCAmountToBurn);
+        // the transfer the coll to user
+        removeCollateral(collId, collAmount);
     }
 
-    function _burnDSC2(
+    // /**
+    //  * @notice The internal function to burn DSC tokens.
+    //  * @dev This low-level function does not check the health factor. The calling function
+    //  * has to check the health factor after calling this function and revert if the health factor
+    //  *
+    //  * @param DSCAmountToBurn The amount of DSC tokens to burn.
+    //  * @param burnOnBehalfOf The address to burn the DSC tokens on behalf of.
+    //  * @param burnDSCFrom The address to burn the DSC tokens from.
+    //  */
+    // function _burnDSC(
+    //     uint256 DSCAmountToBurn,
+    //     address burnOnBehalfOf,
+    //     address burnDSCFrom
+    // ) private {
+    //     /// Incase of liquidation, the liquidators burn DSC Amount gets deducted
+    //     /// from the user who's being liquidated so that they may not claim the DSC after liquidation.
+    //     s_DSCMinted[burnOnBehalfOf] -= DSCAmountToBurn;
+
+    //     /// Transfer the DSC from the user (or liquidator incase of a liquidation flow)
+    //     /// to the DSCEngine contract before burning.
+    //     bool success = i_DSC.transferFrom(
+    //         burnDSCFrom,
+    //         address(this),
+    //         DSCAmountToBurn
+    //     );
+
+    //     if (!success) {
+    //         revert DSCEngine__BurningDSCFailed();
+    //     }
+
+    //     /// Now DSCEngine contract burns the DSC tokens.
+    //     i_DSC.burn(DSCAmountToBurn);
+    // }
+
+    function _burnDSC(
         bytes32 collId,
-        uint256 collAmount,
-        uint256 DSCAmount,
-        address burnOnBehalfOf,
-        address burnFrom
+        uint256 DSCAmount /*address burnOnBehalfOf,
+        address burnFrom*/
     ) private {
         // reduce their debt
-        shrinkVault(collId, burnOnBehalfOf, collAmount, DSCAmount);
+        shrinkVaultDebt(collId, msg.sender, DSCAmount);
 
         // transfer dsc back to the engine.
-        bool success = i_DSC.transferFrom(burnFrom, address(this), DSCAmount);
+        bool success = i_DSC.transferFrom(msg.sender, address(this), DSCAmount);
 
         if (!success) {
             revert DSCEngine__BurningDSCFailed();

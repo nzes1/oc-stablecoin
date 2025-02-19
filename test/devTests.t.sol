@@ -7,6 +7,7 @@ import {DeployDSC} from "../script/DeployDSC.s.sol";
 import {HelperConfig} from "../script/HelperConfig.s.sol";
 import {DSCEngine} from "../src/DSCEngine.sol";
 import {DecentralizedStableCoin} from "../src/DecentralizedStableCoin.sol";
+import {Structs} from "../src/Structs.sol";
 
 contract DevTest is Test {
     DSCEngine dscEngine;
@@ -32,6 +33,8 @@ contract DevTest is Test {
         uint256 liquidationThresholdPercentage = 500;
         uint256 minDebtAllowed = 100;
         uint256 liquidationRatio = 150;
+        address priceFeed = address(5555);
+        uint8 decimals = 18;
 
         // owner is default sender in foundry
         vm.startPrank(0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38);
@@ -41,7 +44,9 @@ contract DevTest is Test {
             interestFee,
             liquidationThresholdPercentage,
             minDebtAllowed,
-            liquidationRatio
+            liquidationRatio,
+            priceFeed,
+            decimals
         );
         vm.stopPrank();
 
@@ -49,7 +54,7 @@ contract DevTest is Test {
 
         assertTrue(allowed[0] == bytes32("ETHC"));
 
-        DSCEngine.CollateralConfig memory configuredColl = dscEngine
+        Structs.CollateralConfig memory configuredColl = dscEngine
             .getCollateralSettings("ETHC");
 
         console.log("ETHC Addr ", configuredColl.tokenAddr);
