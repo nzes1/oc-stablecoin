@@ -69,13 +69,21 @@ contract VaultManager is Storage {
         s_vaults[collId][msg.sender].lockedCollateral -= collAmount;
     }
 
+    function vaultDetails(
+        bytes32 collId,
+        address owner
+    ) internal view returns (uint256 collAmount, uint256 dscDebt) {
+        collAmount = s_vaults[collId][owner].lockedCollateral;
+        dscDebt = s_vaults[collId][owner].dscDebt;
+    }
+
     function isVaultHealthy(
         bytes32 collId,
         address owner
     ) internal returns (bool safe, uint256 healthFactor) {
         // ratio of coll -> dscdebt for this coll
         // get coll value and compare to debt
-        // ratio should be at minimum the configured liquidation ratio for this coll
+        // ratio should be at minimum 1e18
 
         // Balance of DSC debt
         uint256 vaultDebt = s_vaults[collId][owner].dscDebt;
@@ -147,7 +155,7 @@ contract VaultManager is Storage {
         // USD value that is scaled relative to the oracle’s decimals.
         rawUsdValue = (amount * uint256(price)) / (10 ** collDecimals);
 
-        return (rawUsdValue);
+        return rawUsdValue;
     }
 
     function scaleUsdValueToDSCDecimals(

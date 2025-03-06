@@ -87,3 +87,131 @@ Similarly, in many stablecoin systems, the protocol doesn’t use the entire col
   Because that might overestimate your “real” collateral backing the debt. The safety buffer (adjusted collateral) is critical to ensure that even in a downturn, there’s enough value to cover the stablecoin debt.
 
 This is why your function uses the adjusted collateral value in calculating the health factor. It’s not simply a mathematical twist—it’s a deliberate design choice to incorporate a safety margin that protects both the protocol and its users.
+
+
+## Auctioning underwater positions
+- will use linear decrease but the minimum  price at max duration for auction will not be hitting zero. WIll come up with a mechanimsm to determine maybe a percentage drop of the initial price. - some good reads on liquidation : https://blog.amberdata.io/performing-liquidations-on-makerdao
+
+
+### Liquidations
+#### Principles
+1.  Time-Decaying Collateral Discount - from 3% decaying down to 1.8% in 1 hour so linear decrease.
+
+Goal: Incentivize rapid liquidations to minimize protocol risk.
+
+Discount Applied to Collateral, Not Debt
+
+Scenario: A position has 100 DSC debt (pegged to 1)backed by collateral worth 150.
+
+  Undercollateralization: Collateral value drops to $140 (<150% of debt).
+
+Liquidation Process:
+
+  Liquidator repays the full debt (100 DSC, worth $100).
+
+  In return, they receive collateral worth $100 + discount (e.g., $110 for a 10% discount).
+
+Profit: Liquidator sells the collateral for $110 → $10 profit.
+
+Why This Works:
+
+- The protocol recovers the full debt (100 DSC).
+
+- Liquidators profit from the discounted collateral, not from underpaying the debt.
+
+Time-Decaying Discount
+
+Mechanics:
+
+  Initial Discount: Starts at a high value (e.g., 15%) when the position is first undercollateralized.
+
+  Linear Decay: Discount decreases over time (e.g., to 5% after 1 hour).
+
+  Example:
+
+  T+0: 15% discount → Liquidator receives $115 collateral for repaying $100 debt.
+
+  T+30min: 10% discount → $110 collateral.
+
+  T+60min: 5% discount → $105 collateral.
+
+Risks Mitigated by this principle
+Protocol Insolvency Risk
+
+  By encouraging immediate liquidation, the protocol avoids further collateral value drops (e.g., from 140→120), which could leave the debt undercollateralized.
+
+Liquidator Inaction
+
+  A decaying discount creates a race-to-liquidate: Early liquidators earn higher rewards, while latecomers get smaller discounts.
+
+Market Volatility
+
+  Rapid liquidations reduce exposure to volatile collateral prices.
+
+Documentation snippet
+### Liquidation Mechanism  
+When a position becomes undercollateralized (e.g., collateral value < 150% of debt), liquidators are incentivized to repay the debt in full (`100 DSC`) in exchange for collateral at a **discounted rate**.  
+
+- **Discount Structure**:  
+  - Starts at 15% and linearly decays to 5% over 1 hour.  
+  - Example: Repaying `$100` debt yields `$115` collateral initially, decreasing to `$105` after 1 hour.  
+
+- **Purpose**:  
+  - Ensures debt is fully repaid while rewarding liquidators for acting swiftly.  
+  - Protects the protocol from prolonged exposure to undercollateralized positions.  
+
+Key Constraint: Rewards (discounts) are capped by the available collateral to prevent over-penalization.
+Thus, 
+
+DISCOUNT = MIN(TIME-BASED DISCOUNT, (Collateral VALUE / DSC DEBT)-1)
+
+The second discount calctulation makes sure the max discount availableis only up to what the user who has been liquidated has on their collateral locked value. Even when the discount is larger percentage than available collateral value.
+
+To avoid losing precision, the calculation above is scaled up using 1e18 before dividing with debt and then the 1 is also scaled to 1e18 so that the calculation is brought down to percentage numbers.
+
+so the formula for the available max discount
+
+(Collateral X PRECISION of 1e18)/Debt - 1e18
+
+--need a function to calculatemaxdiscount()
+-- minmimumoftwovalues()
+
+### Precision Handling  
+All values (collateral, debt, discounts) are scaled by `1e18` to avoid truncation:  
+- **Example**: $140 → `140e18`, 10% → `0.1e18`.  
+- **Max Discount**: `(collateral * 1e18 / debt) - 1e18`.  
+
+2. Risk-Adjusted Liquidator Rewards
+
+To prioritize liquidation of larger debt positions (higher systemic risk) while ensuring smaller positions remain attractive, use a scaled reward system based on debt size.
+- Using the "clamped linear" model or also called piecewise linear model.
+- This model is governed by the formula - Reward = min(max(k × Debt, R_min), R_max)
+- where:
+  - k (the Proportionality Constant):
+This value represents the fraction of the debt that you’ll give as a reward. For instance, if k is 0.05 (or 5%), a debt of 1,000 units would yield a reward of 50 units. In DeFi protocols, liquidation bonuses often hover in the 5–10% range. So you might choose k around 0.05 to 0.1, depending on how aggressive you want the incentive to be.
+  - R_min (Minimum Reward):
+This is a floor to ensure that even very small liquidations are worthwhile for liquidators. The idea is to cover basic costs (like gas fees) so that the effort is always compensated. On networks like Ethereum, where gas can be expensive, a typical minimum might be in the range of 10–20 stable coin units (or an equivalent value) so that liquidators are motivated even when the debt is small.
+- R_max (Maximum Reward):
+This cap prevents the reward from growing without bounds when the debt is very large. It’s a safeguard against over-incentivizing the liquidation of huge positions, which might distort system dynamics. Drawing inspiration from protocols like MakerDAO or Compound—where penalties or incentives rarely exceed a certain percentage of the collateral or debt—you might set R_max to a value that, for example, limits rewards to the equivalent of a 5–10% bonus on a “typical” large liquidation. In practice, values might range anywhere from a few hundred to a thousand stable coin units, depending on the typical debt sizes and your risk management goals.
+
+For this project, the following values are used:
+
+For collateral with less than 150% overcollateralization: k = 0.5% (0.005)
+
+For collateral with 150% or more overcollateralization: k = 1.5% (0.015) -- Liquidators receive a higher k when the collateral is riskier (150% and above), which aligns with the need to compensate for higher volatility.
+
+R_min: A reward equivalent to $10 (10 dsc) -- Setting a minimum reward ensures that even the smallest debt positions (limited to 100 dsc) offer a sufficient incentive. For a 100 dsc debt, the computed reward would be very low (0.5 or 1.5 dsc), so bumping it to $10 is necessary to cover gas fees and make liquidations worthwhile. Although this means small positions have a high effective reward percentage, it’s a known and accepted trade-off in many protocols.
+
+R_max: 5000 dsc (or $5000) -- The cap of 5000 dsc ensures that no matter how large the debt, the reward doesn’t spiral out of control. For very large positions, even though the raw calculation would yield a much higher bonus, the cap keeps the payout predictable.
+
+For instance, under a 110% requirement, the reward reaches 5000 dsc only at around 1,000,000 dsc in debt.
+Under a 150% requirement, the cap is hit at an even lower debt level (around 333,333 dsc) because of the higher k.
+This design is common to prevent excessive incentives that could destabilize the system. If your protocol expects many high-debt positions, you might consider a slight increase in R_max, but be cautious: raising it too much can lead to over-incentivization and potential abuse.
+
+-- For the smallest allowed debt, the computed reward (k × Debt) is less than the minimum. Therefore, the system always awards the minimum of 10 dsc. This helps ensure liquidators cover the cost (like gas fees) even for very small positions.
+
+-- For very large debt positions (whether in the millions or billions), the computed reward would normally be huge. However, thanks to the R_max cap, the reward never exceeds 5000 dsc. This prevents runaway incentives and ensures that the reward stays within a controlled, predictable range.
+
+## Fees
+Protocol fees 1% APR (annual percentage rate)
+Liquidation penalty - 2%

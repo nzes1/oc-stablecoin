@@ -817,6 +817,10 @@ contract DSCEngine is
     /*//////////////////////////////////////////////////////////////
                        COLLATERAL CONFIGURATIONS
     //////////////////////////////////////////////////////////////*/
+    // liquidation threshold percentage is the value from
+    // Threshold = (Liquidation precision * 100) / Desired Overcollateralization Ratio (%)
+    // Check Deepseek cchat here: https://chat.deepseek.com/a/chat/s/767f8d14-e4e1-4e89-b313-690da60cefa2
+
     function configureCollateral(
         bytes32 collateralId,
         address tokenAddr,
@@ -866,6 +870,34 @@ contract DSCEngine is
         }
     }
 
+    function updateLowRiskLiqParams(
+        uint256 rewardRate,
+        uint256 minReward,
+        uint256 maxReward,
+        uint256 discountDecayTime
+    ) external onlyOwner {
+        lowRiskParams = Structs.LiquidationParams({
+            rewardRate: rewardRate,
+            minReward: minReward,
+            maxReward: maxReward,
+            discountDecayTime: discountDecayTime
+        });
+    }
+
+    function updateHighRiskLiqParams(
+        uint256 rewardRate,
+        uint256 minReward,
+        uint256 maxReward,
+        uint256 discountDecayTime
+    ) external onlyOwner {
+        highRiskParams = Structs.LiquidationParams({
+            rewardRate: rewardRate,
+            minReward: minReward,
+            maxReward: maxReward,
+            discountDecayTime: discountDecayTime
+        });
+    }
+
     function getCollateralSettings(
         bytes32 collateralId
     ) external view returns (Structs.CollateralConfig memory) {
@@ -884,5 +916,15 @@ contract DSCEngine is
         bytes32 collId
     ) external view returns (address) {
         return s_collaterals[collId].tokenAddr;
+    }
+
+    function getVaultInformation(
+        bytes32 collId,
+        address owner
+    ) external view returns (uint256 collAmount, uint256 dscDebt) {
+        collAmount = s_vaults[collId][owner].lockedCollateral;
+        dscDebt = s_vaults[collId][owner].dscDebt;
+
+        return (collAmount, dscDebt);
     }
 }
