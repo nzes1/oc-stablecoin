@@ -12,7 +12,13 @@ contract Storage {
     uint256 internal constant MIN_HEALTH_FACTOR = 1e18;
     uint256 internal constant LIQ_DISCOUNT_START = 3e16; // 3%
     uint256 internal constant LIQ_DISCOUNT_END = 18e15; // 1.8%
-    uint56 internal constant LIQ_DISCOUNT_DECAY_TIME = 1 hours;
+    uint256 internal constant LIQ_DISCOUNT_DECAY_TIME = 1 hours;
+    uint256 internal constant LIQ_DISCOUNT_SCALE = 100e18;
+    uint256 internal constant LIQ_MIN_REWARD = 10e18; // 10 dsc
+    uint256 internal constant LIQ_MAX_REWARD = 5000e18; // 5000 dsc
+    uint256 internal constant LIQ_REWARD_PER_DEBT_SIZE_LOW_RISK = 5e15; // 0.5%
+    uint256 internal constant LIQ_REWARD_PER_DEBT_SIZE_HIGH_RISK = 15e15; // 1.5%
+
     // Vaults per owner per collateral
     mapping(bytes32 collateralId => mapping(address owner => Structs.Vault))
         internal s_vaults;

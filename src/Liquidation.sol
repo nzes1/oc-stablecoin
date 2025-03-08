@@ -17,7 +17,13 @@ contract Liquidations is Storage, VaultManager {
         (bool vaultIsHealthy, ) = isVaultHealthy(collId, owner);
 
         // If unhealthy, mark it as undercollateralized by storing this timestamp
-        if (!vaultIsHealthy) {}
+        // only if not previously stored.
+        if (!vaultIsHealthy) {
+            // Only when zero, set it
+            if (firstUnderwaterTime[collId][owner] == 0) {
+                firstUnderwaterTime[collId][owner] = block.timestamp;
+            }
+        }
 
         return vaultIsHealthy;
     }
@@ -63,17 +69,69 @@ contract Liquidations is Storage, VaultManager {
 
     function calculateLiquidationRewards(
         bytes32 collId,
-        uint256 dsc,
         address owner
-    ) public {
+    ) public view returns (uint256 rewards) {
+        uint256 totalRewards;
         // time decaying discount on collateral
         // on top add the reward per size
-        (uint256 collAmount, uint256 dsc) = vaultDetails(collId, owner);
+        (, uint256 dscDebt) = vaultDetails(collId, owner);
+
+        // Time when the vault became undercollateralized to determine any fast paced
+        // discount to liquidator
+        uint256 underwaterStartTime = firstUnderwaterTime[collId][owner];
+
+        // Discount in USD based on speed of execution.
+        uint256 discount = liquidationDiscountDecay(
+            underwaterStartTime,
+            dscDebt
+        );
+
+        // Rewards in USD based on size of debt - more rewards for bigger vaults of debts
+
+        uint256 rewardBasedOnDebtSize = calculateRewardBasedOnDebtSize(
+            collId,
+            dscDebt
+        );
+
+        // total rewards in USD/dsc amount -- needs to be converted to coll amount and transfered.
+        totalRewards = discount + rewardBasedOnDebtSize;
+
+        return totalRewards;
     }
 
-    function liquidationDiscountDecay() internal returns (uint256 discount) {
+    function liquidationDiscountDecay(
+        uint256 startTime,
+        uint256 dsc
+    ) internal view returns (uint256 discount) {
         // get current discount %
-        uint256 rate = timeDecayedLiquidationDiscountRate();
+        uint256 rate = timeDecayedLiquidationDiscountRate(startTime);
+
+        // Since discount is applied relative to dsc amount, but charged or added to collateral
+        // we can say total dsc amount = 100%
+        //                         ??  = WHAT ABOUT SAY TOTAL DISCOUNT OF 3%
+        // Then this applies to other rates resulting to the formula
+        // discount = (rate * dsc debt amount) / 100%
+        // But rate is using a precision of 18 decimals. So the 100% needs to be scaled to same precison
+        /// so scale up the divisor
+        // (rate * dsc debt amount) / (100 * PRECISION)
+
+        discount = (rate * dsc) / LIQ_DISCOUNT_SCALE;
+    }
+
+    function calculateRewardBasedOnDebtSize(
+        bytes32 collId,
+        uint256 dscDebtSize
+    ) internal view returns (uint256 reward) {
+        uint256 ocr = getOCR(collId);
+
+        // Reward for colletarals of < 150% OC = 1.5e18 or 15e17
+        if (ocr < 15e17) {
+            return calculateRewardForLowRiskCollateral(dscDebtSize);
+        }
+        // means ocr is >= to 15e17 which is high risk
+        else {
+            return calculateRewardForHighRiskCollateral(dscDebtSize);
+        }
     }
 
     function timeDecayedLiquidationDiscountRate(
@@ -93,5 +151,41 @@ contract Liquidations is Storage, VaultManager {
 
         // The current discount is start discount less the decayed one
         return LIQ_DISCOUNT_START - discountDecayed;
+    }
+
+    function getOCR(bytes32 collId) private view returns (uint256 ocr) {
+        uint256 liqThreshold = s_collaterals[collId]
+            .liquidationThresholdPercentage;
+
+        return (PRECISION / liqThreshold);
+    }
+
+    function calculateRewardForLowRiskCollateral(
+        uint256 dscDebt
+    ) private pure returns (uint256 reward) {
+        uint256 computedReward = (LIQ_REWARD_PER_DEBT_SIZE_LOW_RISK * dscDebt) /
+            PRECISION;
+        reward = min(max(computedReward, LIQ_MIN_REWARD), LIQ_MAX_REWARD);
+
+        return reward;
+    }
+
+    function calculateRewardForHighRiskCollateral(
+        uint256 dscDebt
+    ) private pure returns (uint256 reward) {
+        uint256 computedReward = (LIQ_REWARD_PER_DEBT_SIZE_HIGH_RISK *
+            dscDebt) / PRECISION;
+
+        reward = min(max(computedReward, LIQ_MIN_REWARD), LIQ_MAX_REWARD);
+
+        return reward;
+    }
+
+    function min(uint256 a, uint256 b) private pure returns (uint256) {
+        return (a < b ? a : b);
+    }
+
+    function max(uint256 a, uint256 b) private pure returns (uint256) {
+        return (a > b ? a : b);
     }
 }
