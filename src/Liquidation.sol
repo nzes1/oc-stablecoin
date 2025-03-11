@@ -51,7 +51,7 @@ contract Liquidations is Storage, VaultManager {
 
         if (!liquidatable) revert LM__VaultNotLiquidatable();
 
-        // If liquidatable, cache the coll amount and debt
+        // If liquidatable, cache the  debt
         uint256 dscDebt = s_vaults[collId][owner].dscDebt;
 
         // liquidator has to settle all debt in whole alone atm
@@ -153,6 +153,7 @@ contract Liquidations is Storage, VaultManager {
         return LIQ_DISCOUNT_START - discountDecayed;
     }
 
+    /// COnfirm decimals scaling up and down for OCR
     function getOCR(bytes32 collId) private view returns (uint256 ocr) {
         uint256 liqThreshold = s_collaterals[collId]
             .liquidationThresholdPercentage;

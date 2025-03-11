@@ -45,6 +45,7 @@ import {CollateralManager} from "./CollateralManager.sol";
 import {VaultManager} from "./VaultManager.sol";
 import {Structs} from "./Structs.sol";
 import {Storage} from "./Storage.sol";
+import {Fees} from "./Fees.sol";
 
 /**
  * @title DSCEngine
@@ -58,6 +59,7 @@ import {Storage} from "./Storage.sol";
 contract DSCEngine is
     Storage,
     Ownable,
+    Fees,
     ReentrancyGuard,
     CollateralManager,
     VaultManager
@@ -773,6 +775,9 @@ contract DSCEngine is
         uint256 DSCAmount /*address burnOnBehalfOf,
         address burnFrom*/
     ) private {
+        // Before burning, fees needs to be collected since the last vault update time
+        // to now
+        settleProtocolFees(collId, msg.sender, DSCAmount);
         // reduce their debt
         shrinkVaultDebt(collId, msg.sender, DSCAmount);
 
@@ -785,6 +790,62 @@ contract DSCEngine is
 
         /// Now DSCEngine contract burns the DSC tokens.
         i_DSC.burn(DSCAmount);
+    }
+
+    function settleProtocolFees(
+        bytes32 collId,
+        address owner,
+        uint256 debt
+    ) internal {
+        // time to charge fee for
+        uint256 deltaTime = block.timestamp -
+            s_vaults[collId][owner].lastUpdatedAt;
+
+        uint256 accumulatedFees = calculateProtocolFee(debt, deltaTime);
+
+        // Equivalence of these fees in collateral form
+        uint256 feeTokenAmount = getTokenAmountFromUsdValue2(
+            collId,
+            accumulatedFees
+        );
+
+        // collateral being charged is already in the engine. Its just a matter of
+        // updating the balances treasury appropriately
+        // The fee is charged from the vault's locked collateral and not the global
+        // balance of the user for that collateral. This is to avoid loss because someone can
+        // decide to keep their vault healthy but have zero balance on the global balances.
+        // But charging the locked collateral forces the user to pay fees and not evade fees since
+        // paying fees has the impact to their health factor which they will make sure to maintain
+        // to avoid liquidation.
+        // HF is not checked here because sometimes fee could be charged during closure which means no need
+        // to enforce HF. So the calling function needs to checkt he HF
+
+        // decrement locked collateral by the fee.
+        s_vaults[collId][owner].lockedCollateral -= feeTokenAmount;
+
+        // Increment the fees collected by the same amount.
+        s_totalCollectedFeesPerCollateral[collId] += feeTokenAmount;
+
+        // After paying fees, update the timestamp to now so that future payments will begin from
+        // now
+        s_vaults[collId][owner].lastUpdatedAt = block.timestamp;
+    }
+
+    function settleLiquidationPenalty(
+        bytes32 collId,
+        address owner,
+        uint256 debt
+    ) internal {
+        uint256 penalty = calculateLiquidationPenalty(debt);
+
+        uint256 penaltyTokenAmount = getTokenAmountFromUsdValue2(
+            collId,
+            penalty
+        );
+
+        s_vaults[collId][owner].lockedCollateral -= penaltyTokenAmount;
+
+        s_totalLiquidationPenaltyPerCollateral[collId] += penaltyTokenAmount;
     }
 
     /**
@@ -868,34 +929,6 @@ contract DSCEngine is
                 break;
             }
         }
-    }
-
-    function updateLowRiskLiqParams(
-        uint256 rewardRate,
-        uint256 minReward,
-        uint256 maxReward,
-        uint256 discountDecayTime
-    ) external onlyOwner {
-        lowRiskParams = Structs.LiquidationParams({
-            rewardRate: rewardRate,
-            minReward: minReward,
-            maxReward: maxReward,
-            discountDecayTime: discountDecayTime
-        });
-    }
-
-    function updateHighRiskLiqParams(
-        uint256 rewardRate,
-        uint256 minReward,
-        uint256 maxReward,
-        uint256 discountDecayTime
-    ) external onlyOwner {
-        highRiskParams = Structs.LiquidationParams({
-            rewardRate: rewardRate,
-            minReward: minReward,
-            maxReward: maxReward,
-            discountDecayTime: discountDecayTime
-        });
     }
 
     function getCollateralSettings(

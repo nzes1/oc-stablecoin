@@ -21,6 +21,7 @@ contract VaultManager is Storage {
 
         s_vaults[collId][msg.sender].lockedCollateral += collAmount;
         s_vaults[collId][msg.sender].dscDebt += DSCAmount;
+        s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
     }
 
     function boostVault(bytes32 collId, uint256 collAmount) public {
@@ -38,6 +39,7 @@ contract VaultManager is Storage {
 
         s_vaults[collId][msg.sender].lockedCollateral += collAmount;
         s_vaults[collId][msg.sender].dscDebt += dscAmount;
+        s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
     }
 
     // function shrinkVault(
@@ -58,6 +60,7 @@ contract VaultManager is Storage {
         uint256 DSCAmount
     ) internal {
         s_vaults[collId][owner].dscDebt -= DSCAmount;
+        s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
     }
 
     function shrinkVaultCollateral(
@@ -189,5 +192,37 @@ contract VaultManager is Storage {
 
         // If they are the same, no scaling is necessary.
         return rawUsdValue;
+    }
+
+    function getTokenAmountFromUsdValue2(
+        bytes32 collId,
+        uint256 usdValue
+    ) internal returns (uint256 tokenAmount) {
+        // The formula for getting the token amount is the opposite for getting usd value
+        // given price P, usd value as U and decimals as D:
+        // 1 token will be represented as 1D which means 1eD 1 expressed in the decimals
+        // and price given is for  1 token
+        // Then P = 1D
+        //      U = ??
+        // (U * 1D ) / P where P maintains it's decimals.
+        // But since the USD value that will be coming here especially during liquidation will
+        // already be scaled up to DSC decimals, then the price needs to be scaled up to 18 decimals too.
+        uint8 collDecimals = s_tokenDecimals[collId];
+
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(
+            s_collaterals[collId].priceFeedAddr
+        );
+
+        (, int256 price, , , ) = priceFeed.latestRoundDataStalenessCheck();
+
+        // First scale price to match decimals of the value being inputted
+        uint256 scaledUpPrice = scaleUsdValueToDSCDecimals(
+            collId,
+            uint256(price)
+        );
+
+        tokenAmount = (usdValue * (10 ** collDecimals)) / scaledUpPrice;
+
+        return tokenAmount;
     }
 }

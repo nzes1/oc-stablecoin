@@ -215,3 +215,37 @@ This design is common to prevent excessive incentives that could destabilize the
 ## Fees
 Protocol fees 1% APR (annual percentage rate)
 Liquidation penalty - 2%
+Years were removed from solidity due to leap seconds and leap years.
+But even in leap years, A year is basically 365 days.
+
+Normally interest = Principle * Rate * Duration of interest which is normally 1 year
+So we can say for For a principal amount D (debt), an annual interest rate r (as a decimal), and a time period T expressed in years, the interest accrued is given by:
+interest = D * r * T
+
+Sine r is an annual rate, then the time T must be in years. In solidity, time is usually in seconds. TO convert the seconds to years, then we divide any given number of seconds with SECONDS_IN_A_YEAR which is approximately 365 days or simply 365 *  24 * 60 * 60 =~ 31,536,000
+
+So the formula is now:
+
+Interest = D * r * T_in_Years
+
+where T_in_Years  = (T_in_seconds) / SECONDS_IN_A_YEAR
+
+Thus Interest = (D * r * ((T_in_seconds) / SECONDS_IN_A_YEAR))
+
+Where the formula can be simplified to multiplication first and division later as:
+
+Interest = (D * r * T_in_seconds) / SECONDS_IN_A_YEAR
+
+But notice that D and r are in 18 decimals. Multiplying them results to 36 decimals result since the time does not have decimals. Thertefore the 36 decimals needs to be scaled down. To do that, we scale up the divisor with 18 decimals so we end up with 
+
+Interest = (D * r * T_in_seconds) / (SECONDS_IN_A_YEAR * 1e18)
+
+So the final interest amount is also in 18 decimals which matches dsc. Its easy now to get the equivalent of the collateral tokens amount to this dsc amount and charge it from that vault.
+
+As for liquidation penalty is a flat 1% fee on the debt size irregardless of the time
+
+liq_penalty = debt * LIQ_PENALTY
+
+and since both are in 18 decimals, the result also needs to be scaled down:
+
+liq_penalty = (debt * LIQ_PENALTY) / 1e18

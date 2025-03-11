@@ -19,6 +19,7 @@ library Structs {
     struct Vault {
         uint256 lockedCollateral;
         uint256 dscDebt;
+        uint256 lastUpdatedAt;
     }
 
     struct LiquidatedVault {
@@ -26,11 +27,11 @@ library Structs {
         uint256 seizedDebt;
     }
 
-    struct LiquidationParams {
-        uint256 rewardRate;
-        uint256 minReward;
-        uint256 maxReward;
-    }
+    // struct LiquidationParams {
+    //     uint256 rewardRate;
+    //     uint256 minReward;
+    //     uint256 maxReward;
+    // }
 
     struct OraclesDecimals {
         bool cached;
