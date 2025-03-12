@@ -45,7 +45,7 @@ contract Liquidations is Storage, VaultManager {
         bytes32 collId,
         uint256 dsc,
         address owner
-    ) external {
+    ) internal {
         // check underwater
         bool liquidatable = vaultIsUnderwater(collId, owner);
 

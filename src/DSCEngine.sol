@@ -46,6 +46,7 @@ import {VaultManager} from "./VaultManager.sol";
 import {Structs} from "./Structs.sol";
 import {Storage} from "./Storage.sol";
 import {Fees} from "./Fees.sol";
+import {Liquidations} from "./Liquidation.sol";
 
 /**
  * @title DSCEngine
@@ -62,7 +63,8 @@ contract DSCEngine is
     Fees,
     ReentrancyGuard,
     CollateralManager,
-    VaultManager
+    VaultManager,
+    Liquidations
 {
     /*//////////////////////////////////////////////////////////////
                                  TYPES
@@ -376,6 +378,45 @@ contract DSCEngine is
         _revertIfHealthFactorIsBelowThreshold(msg.sender);
     }
 
+    function liquidateVault(
+        bytes32 collId,
+        address owner,
+        uint256 dscToRepay
+    ) public {
+        // Initiate the liquidation
+        initiateLiquidation(collId, dscToRepay, owner);
+
+        // If above call does not revert, then supplied dsc is enough, take it from liquidator
+        // and burn it.
+        // calling internal _burnDSC automatically also charges the fees and collects them
+        _burnDSC(collId, dscToRepay, owner, msg.sender);
+
+        // Settle penalty now - might need to take penalty before burning
+        settleLiquidationPenalty(collId, owner, dscToRepay);
+
+        // Calculate rewards
+        uint256 liquidatorRewardsUsd = calculateLiquidationRewards(
+            collId,
+            owner
+        );
+
+        // Get the collateral tokens equivalent of the rewards
+        uint256 liquidatorTokens = getTokenAmountFromUsdValue2(
+            collId,
+            liquidatorRewardsUsd
+        );
+
+        // Base collateral liquidator should receive without rewards
+        uint256 baseCollateral = getTokenAmountFromUsdValue2(
+            collId,
+            dscToRepay
+        );
+
+        uint256 totalPayout = baseCollateral + liquidatorTokens;
+
+        // Transfer collateral + rewards to liquidator >>>
+    }
+
     /**
      * @dev Get an account's collateral balance of a particular token.
      */
@@ -530,7 +571,7 @@ contract DSCEngine is
 
     // no health check!!!
     function burnDSC(bytes32 collId, uint256 DSCAmount) public {
-        _burnDSC(collId, DSCAmount);
+        _burnDSC(collId, DSCAmount, msg.sender, msg.sender);
     }
 
     /**
@@ -772,17 +813,18 @@ contract DSCEngine is
 
     function _burnDSC(
         bytes32 collId,
-        uint256 DSCAmount /*address burnOnBehalfOf,
-        address burnFrom*/
+        uint256 DSCAmount,
+        address burnOnBehalfOf,
+        address burnFrom
     ) private {
         // Before burning, fees needs to be collected since the last vault update time
         // to now
-        settleProtocolFees(collId, msg.sender, DSCAmount);
+        settleProtocolFees(collId, burnOnBehalfOf, DSCAmount);
         // reduce their debt
-        shrinkVaultDebt(collId, msg.sender, DSCAmount);
+        shrinkVaultDebt(collId, burnOnBehalfOf, DSCAmount);
 
         // transfer dsc back to the engine.
-        bool success = i_DSC.transferFrom(msg.sender, address(this), DSCAmount);
+        bool success = i_DSC.transferFrom(burnFrom, address(this), DSCAmount);
 
         if (!success) {
             revert DSCEngine__BurningDSCFailed();
@@ -828,6 +870,7 @@ contract DSCEngine is
 
         // After paying fees, update the timestamp to now so that future payments will begin from
         // now
+        // might actually not need it since shrinkVault updates too
         s_vaults[collId][owner].lastUpdatedAt = block.timestamp;
     }
 
