@@ -56,4 +56,7 @@ contract Storage {
 
     mapping(bytes32 collId => uint256)
         internal s_totalLiquidationPenaltyPerCollateral;
+
+    mapping(bytes32 collateralId => mapping(address owner => Structs.Vault))
+        internal s_absorbedBadVaults;
 }

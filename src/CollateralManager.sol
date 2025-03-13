@@ -66,7 +66,7 @@ contract CollateralManager is Storage {
         // CEI
         // Ether removal
         // They need to have enough to remove
-        // Will need to think of a way to cache msg.sender here
+        ///// THISSSSS Will need to think of a way to cache msg.sender here ///////
         if (amount == 0) revert CM__ZeroAmountNotAllowed();
         if (s_collBalances[collId][msg.sender] < amount) {
             revert CM__AmountExceedsCurrentBalance(

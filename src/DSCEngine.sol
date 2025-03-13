@@ -381,24 +381,29 @@ contract DSCEngine is
     function liquidateVault(
         bytes32 collId,
         address owner,
-        uint256 dscToRepay
+        uint256 dscToRepay,
+        bool withdraw
     ) public {
+        // msg.sender is the liquidator
+        address liquidator = msg.sender;
         // Initiate the liquidation
         initiateLiquidation(collId, dscToRepay, owner);
 
         // If above call does not revert, then supplied dsc is enough, take it from liquidator
-        // and burn it.
-        // calling internal _burnDSC automatically also charges the fees and collects them
-        _burnDSC(collId, dscToRepay, owner, msg.sender);
+        // and burn it; but first take liquidation penalty, calculate all rewards that are dependent
+        // on dssc debt since burn will remove/close the debt from vault.
 
-        // Settle penalty now - might need to take penalty before burning
+        // Settle penalty first
         settleLiquidationPenalty(collId, owner, dscToRepay);
 
-        // Calculate rewards
+        // Calculate rewards secondly
         uint256 liquidatorRewardsUsd = calculateLiquidationRewards(
             collId,
             owner
         );
+
+        // calling internal _burnDSC automatically also charges the fees and collects them
+        _burnDSC(collId, dscToRepay, owner, liquidator);
 
         // Get the collateral tokens equivalent of the rewards
         uint256 liquidatorTokens = getTokenAmountFromUsdValue2(
@@ -415,6 +420,47 @@ contract DSCEngine is
         uint256 totalPayout = baseCollateral + liquidatorTokens;
 
         // Transfer collateral + rewards to liquidator >>>
+        // The transfer involves updating the internal treasury books
+        // But if the liquidator has marked withdraw as true, then the transfer will
+        // further do actual sending of the tokens out of the system.
+        // Otherwise the balances will reflect inside the system giving the liquidator
+        // the chance of say openening vaults of their own without having to redepeosit collateral.
+        // If there is any excess, that will be for the vault owner
+
+        uint256 vaultCollBal = s_vaults[collId][owner].lockedCollateral;
+
+        // standard liquidation scenario where collateral is sufficient
+        if (vaultCollBal >= totalPayout) {
+            s_vaults[collId][owner].lockedCollateral -= totalPayout;
+            s_collBalances[collId][liquidator] += totalPayout;
+        }
+        // Partial rewards but full base collateral
+        // Important to note that rewards can be zero here too!
+        else if (vaultCollBal >= baseCollateral) {
+            s_vaults[collId][owner].lockedCollateral -= vaultCollBal;
+            s_collBalances[collId][liquidator] += vaultCollBal;
+        }
+        // Protocol absorbs the vault as bad debt
+        else {
+            delete s_vaults[collId][owner];
+            s_absorbedBadVaults[collId][address(this)] = Structs.Vault({
+                lockedCollateral: vaultCollBal,
+                dscDebt: dscToRepay,
+                lastUpdatedAt: block.timestamp
+            });
+        }
+
+        // Withdraw
+        if (withdraw) {
+            removeCollateral(collId, s_collBalances[collId][liquidator]);
+        }
+
+        // If there is surplus, increase the balance of liquidated vault owner
+        uint256 surplus = s_vaults[collId][owner].lockedCollateral;
+        if (surplus > 0) {
+            s_vaults[collId][owner].lockedCollateral -= surplus;
+            s_collBalances[collId][owner] += surplus;
+        }
     }
 
     /**

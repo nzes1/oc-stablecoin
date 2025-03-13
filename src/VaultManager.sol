@@ -60,7 +60,7 @@ contract VaultManager is Storage {
         uint256 DSCAmount
     ) internal {
         s_vaults[collId][owner].dscDebt -= DSCAmount;
-        s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
+        s_vaults[collId][owner].lastUpdatedAt = block.timestamp;
     }
 
     function shrinkVaultCollateral(
