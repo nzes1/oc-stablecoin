@@ -19,10 +19,11 @@ library ActorsLibrary {
         }
     }
 
-    function selectRandomSender(
-        SimulatedUsers storage su,
-        uint256 seed
-    ) internal view returns (address selectedActor) {
+    function selectRandomSender(SimulatedUsers storage su, uint256 seed)
+        internal
+        view
+        returns (address selectedActor)
+    {
         // Select a random actor from the list of actors
         if (su.senders.length > 0) {
             selectedActor = su.senders[seed % su.senders.length];

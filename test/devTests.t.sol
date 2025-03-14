@@ -22,8 +22,7 @@ contract DevTest is Test {
     function setUp() public {
         deployer = new DeployDSC();
         (dsc, dscEngine, config) = deployer.run();
-        (wETH, wBTC, wETHUsdPriceFeed, wBTCUsdPriceFeed, ) = config
-            .activeChainNetworkConfig();
+        (wETH, wBTC, wETHUsdPriceFeed, wBTCUsdPriceFeed,) = config.activeChainNetworkConfig();
     }
 
     function test_ConfiguringNewCollateralType() public {
@@ -54,8 +53,7 @@ contract DevTest is Test {
 
         assertTrue(allowed[0] == bytes32("ETHC"));
 
-        Structs.CollateralConfig memory configuredColl = dscEngine
-            .getCollateralSettings("ETHC");
+        Structs.CollateralConfig memory configuredColl = dscEngine.getCollateralSettings("ETHC");
 
         console.log("ETHC Addr ", configuredColl.tokenAddr);
         console.log("ETHC Fee", configuredColl.interestFee);

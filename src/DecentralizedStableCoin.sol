@@ -59,15 +59,9 @@ contract DecentralizedStableCoin is Ownable, ERC20Burnable, ERC20Permit {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
-    error DecentralizedStableCoin__InsufficientBurnAmount(
-        uint256 minimumBurnAmount,
-        uint256 burnAmount
-    );
+    error DecentralizedStableCoin__InsufficientBurnAmount(uint256 minimumBurnAmount, uint256 burnAmount);
 
-    error DecentralizedStableCoin__InsufficientBalanceToBurn(
-        uint256 balance,
-        uint256 burnAmount
-    );
+    error DecentralizedStableCoin__InsufficientBalanceToBurn(uint256 balance, uint256 burnAmount);
 
     error DecentralizedStableCoin__CannotMintZeroAmountOfTokens();
 
@@ -79,11 +73,7 @@ contract DecentralizedStableCoin is Ownable, ERC20Burnable, ERC20Permit {
      *  The same name is used to initialize the ERC20Permit which will be used
      * as the domain separator `name` field value for EIP712.
      */
-    constructor()
-        Ownable(msg.sender)
-        ERC20("DecentralizedStableCoin", "DSC")
-        ERC20Permit("DecentralizedStableCoin")
-    {}
+    constructor() Ownable(msg.sender) ERC20("DecentralizedStableCoin", "DSC") ERC20Permit("DecentralizedStableCoin") {}
 
     /*//////////////////////////////////////////////////////////////
                                FUNCTIONS
@@ -101,18 +91,12 @@ contract DecentralizedStableCoin is Ownable, ERC20Burnable, ERC20Permit {
 
         /// User has to burn at least 1 token
         if (burnTokensAmt <= 0) {
-            revert DecentralizedStableCoin__InsufficientBurnAmount(
-                MINIMUM_BURN_AMOUNT,
-                burnTokensAmt
-            );
+            revert DecentralizedStableCoin__InsufficientBurnAmount(MINIMUM_BURN_AMOUNT, burnTokensAmt);
         }
 
         /// User cannot burn more than they have
         if (burnTokensAmt > userBalance) {
-            revert DecentralizedStableCoin__InsufficientBalanceToBurn(
-                userBalance,
-                burnTokensAmt
-            );
+            revert DecentralizedStableCoin__InsufficientBalanceToBurn(userBalance, burnTokensAmt);
         }
 
         /// If the user has enough tokens, burn the tokens
@@ -126,10 +110,7 @@ contract DecentralizedStableCoin is Ownable, ERC20Burnable, ERC20Permit {
      * @param account The recipient of the minted tokens.
      * @param mintAmt The amount of tokens to mint.
      */
-    function mint(
-        address account,
-        uint256 mintAmt
-    ) public onlyOwner returns (bool success) {
+    function mint(address account, uint256 mintAmt) public onlyOwner returns (bool success) {
         /// Recipient of the minted tokens has to be a valid address
         if (account == address(0)) {
             revert DecentralizedStableCoin__InvalidRecipientAddress();
@@ -146,10 +127,7 @@ contract DecentralizedStableCoin is Ownable, ERC20Burnable, ERC20Permit {
 
     // Prevent users from bypassing the access control of burn() and use the burnFrom()
     // of the ERC20Burnable to burn tokens
-    function burnFrom(
-        address account,
-        uint256 value
-    ) public override onlyOwner {
+    function burnFrom(address account, uint256 value) public override onlyOwner {
         super.burnFrom(account, value);
     }
 }

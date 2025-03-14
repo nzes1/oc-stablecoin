@@ -17,11 +17,7 @@ contract CollateralManager is Storage {
     error CM__ZeroAmountNotAllowed();
     error CM__AmountExceedsCurrentBalance(bytes32 collId, uint256 bal);
 
-    event CM__CollateralDeposited(
-        bytes32 collId,
-        address depositor,
-        uint256 amount
-    );
+    event CM__CollateralDeposited(bytes32 collId, address depositor, uint256 amount);
 
     event CM__CollateralWithdrawn(bytes32 collId, address user, uint256 amount);
 
@@ -51,11 +47,7 @@ contract CollateralManager is Storage {
         }
         // ERC20 transfers
         else {
-            bool success = ERC20Like(collTknAddr).transferFrom(
-                depositor,
-                address(this),
-                collAmt
-            );
+            bool success = ERC20Like(collTknAddr).transferFrom(depositor, address(this), collAmt);
             require(success, "Collateral Deposit Failed");
             s_collBalances[collId][depositor] += collAmt;
         }
@@ -69,10 +61,7 @@ contract CollateralManager is Storage {
         ///// THISSSSS Will need to think of a way to cache msg.sender here ///////
         if (amount == 0) revert CM__ZeroAmountNotAllowed();
         if (s_collBalances[collId][msg.sender] < amount) {
-            revert CM__AmountExceedsCurrentBalance(
-                collId,
-                s_collBalances[collId][msg.sender]
-            );
+            revert CM__AmountExceedsCurrentBalance(collId, s_collBalances[collId][msg.sender]);
         }
         s_collBalances[collId][msg.sender] -= amount;
 
@@ -80,7 +69,7 @@ contract CollateralManager is Storage {
 
         // Ether withdrawal
         if (collId == "ETH") {
-            (bool success, ) = payable(msg.sender).call{value: amount}("");
+            (bool success,) = payable(msg.sender).call{value: amount}("");
             require(success, "Ether Transfer Failed");
         } else {
             // Get the address of this collateral
@@ -89,9 +78,7 @@ contract CollateralManager is Storage {
         }
     }
 
-    function isAllowed(
-        bytes32 collId
-    ) private view returns (bool allowed, address addr) {
+    function isAllowed(bytes32 collId) private view returns (bool allowed, address addr) {
         Structs.CollateralConfig memory config;
         config = s_collaterals[collId];
         //check collateral settings have been authorized by governance.

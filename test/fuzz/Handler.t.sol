@@ -80,10 +80,7 @@ contract Handler is Test {
      * @param tokenSeed - A random seed to select a collateral token
      * @param amount - The amount of collateral to deposit
      */
-    function depositCollateral(
-        uint256 tokenSeed,
-        uint256 amount
-    ) public createActor countCall("depositCollateral") {
+    function depositCollateral(uint256 tokenSeed, uint256 amount) public createActor countCall("depositCollateral") {
         ERC20Mock tokenAddr = _getCollateralTokenFromSeed(tokenSeed);
 
         // Avoid depositing zero collateral amount
@@ -135,11 +132,11 @@ contract Handler is Test {
      * @param senderSeed - A random seed to select an actor from the list of actors
      * that have already interacted with the protocol.
      */
-    function redeemCollateral(
-        uint256 tokenSeed,
-        uint256 amount,
-        uint256 senderSeed
-    ) public useActor(senderSeed) countCall("redeemCollateral") {
+    function redeemCollateral(uint256 tokenSeed, uint256 amount, uint256 senderSeed)
+        public
+        useActor(senderSeed)
+        countCall("redeemCollateral")
+    {
         // If the actor is the zero address, then there is no need to redeem collateral
         // because this implies no actor has deposited collateral.
 
@@ -150,10 +147,7 @@ contract Handler is Test {
         // Valid token to withdraw
         ERC20Mock tokenAddr = _getCollateralTokenFromSeed(tokenSeed);
 
-        uint256 maxRedeemableCollateral = dscEngine.getAccountCollateral(
-            address(tokenAddr),
-            currentActor
-        );
+        uint256 maxRedeemableCollateral = dscEngine.getAccountCollateral(address(tokenAddr), currentActor);
 
         // A user might have collateral balance of one token and not the other
         if (maxRedeemableCollateral == 0) {
@@ -172,9 +166,7 @@ contract Handler is Test {
     /*//////////////////////////////////////////////////////////////
                             HELPER FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-    function _getCollateralTokenFromSeed(
-        uint256 tokenSeed
-    ) private view returns (ERC20Mock) {
+    function _getCollateralTokenFromSeed(uint256 tokenSeed) private view returns (ERC20Mock) {
         // Randomly select one of the two collateral tokens
         // Since they are only 2 collateral tokens, we can use a simple modulo operation
         // using the ternary operator.

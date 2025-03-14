@@ -29,17 +29,13 @@ contract OpenInvariantsTest is StdInvariant, Test {
     function setUp() public {
         deployer = new DeployDSC();
         (dsc, dscEngine, config) = deployer.run();
-        (wETH, wBTC, wETHUsdPriceFeed, wBTCUsdPriceFeed, ) = config
-            .activeChainNetworkConfig();
+        (wETH, wBTC, wETHUsdPriceFeed, wBTCUsdPriceFeed,) = config.activeChainNetworkConfig();
 
         targetContract(address(dscEngine));
     }
 
     // A test invariant which is false.
-    function invariant_TotalSystemCollateralValueMustAlwaysBeGreaterThanOrEqualTotalDSCSupply()
-        public
-        view
-    {
+    function invariant_TotalSystemCollateralValueMustAlwaysBeGreaterThanOrEqualTotalDSCSupply() public view {
         // Get total collateral
         uint256 wETHCollateral = ERC20Mock(wETH).balanceOf(address(dscEngine));
         uint256 wBTCCollateral = ERC20Mock(wBTC).balanceOf(address(dscEngine));

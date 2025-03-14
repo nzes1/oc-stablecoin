@@ -49,8 +49,7 @@ contract DSCEngineTest is Test {
     function setUp() public {
         deployer = new DeployDSC();
         (dsc, dscEngine, config) = deployer.run();
-        (wETH, wBTC, wETHUsdPriceFeed, wBTCUsdPriceFeed, ) = config
-            .activeChainNetworkConfig();
+        (wETH, wBTC, wETHUsdPriceFeed, wBTCUsdPriceFeed,) = config.activeChainNetworkConfig();
         vm.deal(TEST_USER_1, STARTING_BALANCE);
         vm.deal(TEST_USER_2, STARTING_BALANCE);
     }
@@ -58,18 +57,12 @@ contract DSCEngineTest is Test {
     /*//////////////////////////////////////////////////////////////
                            CONSTRUCTOR TESTS
     //////////////////////////////////////////////////////////////*/
-    function test_RevertWhen_DSCEngineDeploymentWithUnequalTokenAndPriceFeedAddressesLengths()
-        public
-    {
+    function test_RevertWhen_DSCEngineDeploymentWithUnequalTokenAndPriceFeedAddressesLengths() public {
         // 1 token but 2 price feeds
         tokens = [wETH];
         priceFeeds = [wETHUsdPriceFeed, wBTCUsdPriceFeed];
 
-        vm.expectRevert(
-            DSCEngine
-                .DSCEngine__CollateralTokensAddressesAndPriceFeedsAddressesLengthMismatch
-                .selector
-        );
+        vm.expectRevert(DSCEngine.DSCEngine__CollateralTokensAddressesAndPriceFeedsAddressesLengthMismatch.selector);
 
         vm.startBroadcast();
         new DSCEngine(tokens, priceFeeds, address(dsc));
@@ -88,9 +81,7 @@ contract DSCEngineTest is Test {
     }
 
     function test_RevertWhen_TokenToDepositAsCollateralIsNotSupported() public {
-        vm.expectRevert(
-            DSCEngine.DSCEngine__CollateralTokenNotAllowed.selector
-        );
+        vm.expectRevert(DSCEngine.DSCEngine__CollateralTokenNotAllowed.selector);
 
         vm.startPrank(TEST_USER_1);
         /// Token with address 456 is not approved as a collateral token.
@@ -123,20 +114,14 @@ contract DSCEngineTest is Test {
         public
         skipTestWhenForking
     {
-        vm.expectPartialRevert(
-            IERC20Errors.ERC20InsufficientAllowance.selector
-        );
+        vm.expectPartialRevert(IERC20Errors.ERC20InsufficientAllowance.selector);
 
         vm.startPrank(TEST_USER_1);
         dscEngine.depositCollateral(wETH, 3);
         vm.stopPrank();
     }
 
-    function test_SuccessfulDepositOfCollateralEmitsEvent()
-        public
-        skipTestWhenForking
-        hasBalance(TEST_USER_1)
-    {
+    function test_SuccessfulDepositOfCollateralEmitsEvent() public skipTestWhenForking hasBalance(TEST_USER_1) {
         uint256 amountToDeposit = 123e18;
 
         vm.startPrank(TEST_USER_1);
@@ -162,10 +147,7 @@ contract DSCEngineTest is Test {
         dscEngine.depositCollateral(wBTC, depositAmount);
         vm.stopPrank();
 
-        uint256 expectedwBTCCollateral = dscEngine.getAccountCollateral(
-            wBTC,
-            TEST_USER_2
-        );
+        uint256 expectedwBTCCollateral = dscEngine.getAccountCollateral(wBTC, TEST_USER_2);
 
         assertEq(expectedwBTCCollateral, depositAmount);
     }
@@ -181,18 +163,12 @@ contract DSCEngineTest is Test {
         uint256 mintableDSC = depositValue / 2; // Max of allowable DSC for the collateral.
 
         vm.startPrank(TEST_USER_1);
-        dscEngine.depositCollateralAndMintDSC(
-            wETH,
-            wETHDepositAmt,
-            mintableDSC
-        );
+        dscEngine.depositCollateralAndMintDSC(wETH, wETHDepositAmt, mintableDSC);
         vm.stopPrank();
 
-        assertTrue(
-            dscEngine.getAccountCollateral(wETH, TEST_USER_1) == wETHDepositAmt
-        );
+        assertTrue(dscEngine.getAccountCollateral(wETH, TEST_USER_1) == wETHDepositAmt);
 
-        (uint256 dscBal, ) = dscEngine.getAccountInformation(TEST_USER_1);
+        (uint256 dscBal,) = dscEngine.getAccountInformation(TEST_USER_1);
         assertEq(dscBal, mintableDSC);
     }
 
@@ -215,37 +191,25 @@ contract DSCEngineTest is Test {
     function test_GetValueInUSDCorrectlyCalculatesTokensValue() public view {
         uint256 wETHAmount = 22 ether;
 
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            wETHUsdPriceFeed
-        );
-        (, int256 price, , , ) = priceFeed.latestRoundData();
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(wETHUsdPriceFeed);
+        (, int256 price,,,) = priceFeed.latestRoundData();
         /// 22 ether  = 22 * 3383 = 74426 USD
         /// For precision sake to be compatible with the DSC token, the value in USD is
         /// having 18 decimals.
-        uint256 expectedValue = (wETHAmount *
-            (uint256(price) * PRECISION_SCALE)) / PRECISION;
+        uint256 expectedValue = (wETHAmount * (uint256(price) * PRECISION_SCALE)) / PRECISION;
 
         uint256 calculatedValue = dscEngine.getValueInUSD(wETH, wETHAmount);
 
         assertTrue(calculatedValue == expectedValue);
     }
 
-    function test_getCollateralTokenAmountFromUsdValueCorrectlyCalculatesTokensAmount()
-        public
-        view
-    {
+    function test_getCollateralTokenAmountFromUsdValueCorrectlyCalculatesTokensAmount() public view {
         uint256 wETHUsdValue = 450 ether; // 18 decimals of USD value
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            wETHUsdPriceFeed
-        );
-        (, int256 price, , , ) = priceFeed.latestRoundData();
-        uint256 expectedwETHAmount = (wETHUsdValue * PRECISION) /
-            (uint256(price) * PRECISION_SCALE);
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(wETHUsdPriceFeed);
+        (, int256 price,,,) = priceFeed.latestRoundData();
+        uint256 expectedwETHAmount = (wETHUsdValue * PRECISION) / (uint256(price) * PRECISION_SCALE);
 
-        uint256 calculatedwETHAmount = dscEngine.getTokenAmountFromUSDValue(
-            wETH,
-            wETHUsdValue
-        );
+        uint256 calculatedwETHAmount = dscEngine.getTokenAmountFromUSDValue(wETH, wETHUsdValue);
 
         console.log("Expected ", expectedwETHAmount);
         console.log("Calculated ", calculatedwETHAmount);
@@ -275,30 +239,16 @@ contract DSCEngineTest is Test {
     //////////////////////////////////////////////////////////////*/
     modifier wETHDepositAndMintDSC(address depositor) {
         vm.startPrank(depositor);
-        uint256 mintableDSC = dscEngine.getValueInUSD(
-            wETH,
-            wETH_DEPOSIT_AMOUNT
-        ) / 2;
-        dscEngine.depositCollateralAndMintDSC(
-            wETH,
-            wETH_DEPOSIT_AMOUNT,
-            mintableDSC
-        );
+        uint256 mintableDSC = dscEngine.getValueInUSD(wETH, wETH_DEPOSIT_AMOUNT) / 2;
+        dscEngine.depositCollateralAndMintDSC(wETH, wETH_DEPOSIT_AMOUNT, mintableDSC);
         vm.stopPrank();
         _;
     }
 
     modifier wBTCDepositAndMintDSC(address depositor) {
         vm.startPrank(depositor);
-        uint256 mintableDSC = dscEngine.getValueInUSD(
-            wBTC,
-            wBTC_DEPOSIT_AMOUNT
-        ) / 2;
-        dscEngine.depositCollateralAndMintDSC(
-            wBTC,
-            wBTC_DEPOSIT_AMOUNT,
-            mintableDSC
-        );
+        uint256 mintableDSC = dscEngine.getValueInUSD(wBTC, wBTC_DEPOSIT_AMOUNT) / 2;
+        dscEngine.depositCollateralAndMintDSC(wBTC, wBTC_DEPOSIT_AMOUNT, mintableDSC);
         vm.stopPrank();
         _;
     }
@@ -312,14 +262,8 @@ contract DSCEngineTest is Test {
         /// Attempting to redeem all collateral and burn all DSC.
         /// This test resulted in the discovery of a bug that restricted users from
         /// redeeming all their collateral and burning all their DSC.
-        uint256 collateralValue = dscEngine.getValueInUSD(
-            wETH,
-            wETH_DEPOSIT_AMOUNT
-        );
-        uint256 collateralAmount = dscEngine.getTokenAmountFromUSDValue(
-            wETH,
-            collateralValue
-        );
+        uint256 collateralValue = dscEngine.getValueInUSD(wETH, wETH_DEPOSIT_AMOUNT);
+        uint256 collateralAmount = dscEngine.getTokenAmountFromUSDValue(wETH, collateralValue);
         uint256 burnableDSC = collateralValue / 2;
 
         vm.startPrank(TEST_USER_1);
@@ -335,28 +279,17 @@ contract DSCEngineTest is Test {
         wETHDepositAndMintDSC(TEST_USER_2)
     {
         // Redeem all collateral but burn only 10% collateral value as DSC.
-        uint256 allCollateralAmount = dscEngine.getAccountCollateral(
-            wETH,
-            TEST_USER_2
-        );
+        uint256 allCollateralAmount = dscEngine.getAccountCollateral(wETH, TEST_USER_2);
 
         // 10 percent value of the collateral.
-        uint256 tenthCollateralValue = (
-            dscEngine.getValueInUSD(wETH, allCollateralAmount)
-        ) / 10;
+        uint256 tenthCollateralValue = (dscEngine.getValueInUSD(wETH, allCollateralAmount)) / 10;
 
         vm.startPrank(TEST_USER_2);
         dsc.approve(address(dscEngine), MAX_APPROVAL);
 
-        vm.expectPartialRevert(
-            DSCEngine.DSCEngine__HealthFactorBelowThreshold.selector
-        );
+        vm.expectPartialRevert(DSCEngine.DSCEngine__HealthFactorBelowThreshold.selector);
 
-        dscEngine.redeemCollateralForDSC(
-            wETH,
-            allCollateralAmount,
-            tenthCollateralValue
-        );
+        dscEngine.redeemCollateralForDSC(wETH, allCollateralAmount, tenthCollateralValue);
         vm.stopPrank();
     }
 
@@ -371,9 +304,7 @@ contract DSCEngineTest is Test {
         vm.startPrank(TEST_USER_1);
         dsc.approve(address(dscEngine), MAX_APPROVAL);
 
-        vm.expectPartialRevert(
-            DSCEngine.DSCEngine__ZeroAmountNotAllowed.selector
-        );
+        vm.expectPartialRevert(DSCEngine.DSCEngine__ZeroAmountNotAllowed.selector);
 
         dscEngine.redeemCollateralForDSC(wBTC, allwBTC, 0);
     }
@@ -432,28 +363,14 @@ contract DSCEngineTest is Test {
             // not all tokens are used at the same time.
 
             // How much DSC can be minted for each of the collateral - wETH and wBTC.
-            uint256 wETH_DSC = dscEngine.getValueInUSD(
-                wETH,
-                wETH_DEPOSIT_AMOUNT
-            ) / 2;
+            uint256 wETH_DSC = dscEngine.getValueInUSD(wETH, wETH_DEPOSIT_AMOUNT) / 2;
 
-            uint256 wBTC_DSC = dscEngine.getValueInUSD(
-                wBTC,
-                wBTC_DEPOSIT_AMOUNT
-            ) / 2;
+            uint256 wBTC_DSC = dscEngine.getValueInUSD(wBTC, wBTC_DEPOSIT_AMOUNT) / 2;
 
             // Deposit collateral and mint DSC for the users.
-            dscEngine.depositCollateralAndMintDSC(
-                wETH,
-                wETH_DEPOSIT_AMOUNT,
-                wETH_DSC
-            );
+            dscEngine.depositCollateralAndMintDSC(wETH, wETH_DEPOSIT_AMOUNT, wETH_DSC);
 
-            dscEngine.depositCollateralAndMintDSC(
-                wBTC,
-                wBTC_DEPOSIT_AMOUNT,
-                wBTC_DSC
-            );
+            dscEngine.depositCollateralAndMintDSC(wBTC, wBTC_DEPOSIT_AMOUNT, wBTC_DSC);
 
             vm.stopPrank();
         }
@@ -472,26 +389,17 @@ contract DSCEngineTest is Test {
          * This will make the health factor of the account to be less than 1 since
          * wBTC collateral token of a user holds more value than the wETH token.
          */
-        uint256 liquidatorCollateralValueBefore = dscEngine
-            .getAccountCollateralValueInUSD(liquidator);
+        uint256 liquidatorCollateralValueBefore = dscEngine.getAccountCollateralValueInUSD(liquidator);
 
         MockV3Aggregator(wBTCUsdPriceFeed).updateAnswer(NEW_PRICE);
 
-        uint256 liquidatorCollateralValueAfter = dscEngine
-            .getAccountCollateralValueInUSD(liquidator);
+        uint256 liquidatorCollateralValueAfter = dscEngine.getAccountCollateralValueInUSD(liquidator);
 
-        uint256 diffToDeposit = liquidatorCollateralValueBefore -
-            liquidatorCollateralValueAfter;
-        uint256 diffToDepositInwBTC = dscEngine.getTokenAmountFromUSDValue(
-            wBTC,
-            diffToDeposit
-        );
+        uint256 diffToDeposit = liquidatorCollateralValueBefore - liquidatorCollateralValueAfter;
+        uint256 diffToDepositInwBTC = dscEngine.getTokenAmountFromUSDValue(wBTC, diffToDeposit);
         // Mint the difference plus the additional that will be used to mint
         // DSC to liquidate the account.
-        uint256 additionalDSCCollateral = dscEngine.getTokenAmountFromUSDValue(
-            wBTC,
-            LIQUIDATION_COLLATERAL
-        );
+        uint256 additionalDSCCollateral = dscEngine.getTokenAmountFromUSDValue(wBTC, LIQUIDATION_COLLATERAL);
         uint256 totalToMint = diffToDepositInwBTC + additionalDSCCollateral + 2;
 
         // So that liquidator's collateral value is not impacted by this price drop
@@ -502,26 +410,17 @@ contract DSCEngineTest is Test {
         ERC20Mock(wBTC).mint(liquidator, totalToMint);
         ERC20Mock(wBTC).approve(address(dscEngine), totalToMint);
         dscEngine.depositCollateral(wBTC, diffToDepositInwBTC + 2);
-        dscEngine.depositCollateralAndMintDSC(
-            wBTC,
-            additionalDSCCollateral,
-            LIQUIDATION_DSC
-        );
+        dscEngine.depositCollateralAndMintDSC(wBTC, additionalDSCCollateral, LIQUIDATION_DSC);
         vm.stopPrank();
 
         _;
     }
 
-    function test_RevertWhen_LiquidatingAnAccountThatHasHealthyHealthFactor()
-        public
-        twoProtocolUsers
-    {
+    function test_RevertWhen_LiquidatingAnAccountThatHasHealthyHealthFactor() public twoProtocolUsers {
         // At the start, all users have a healthy health factor of 1.
         // Test user 2 attempts to liquidate user 1.
         vm.startPrank(TEST_USER_2);
-        vm.expectPartialRevert(
-            DSCEngine.DSCEngine__HealthFactorNotLiquidatable.selector
-        );
+        vm.expectPartialRevert(DSCEngine.DSCEngine__HealthFactorNotLiquidatable.selector);
         dscEngine.liquidateAccount(wETH, TEST_USER_1, 1000 ether);
         vm.stopPrank();
     }
@@ -538,15 +437,9 @@ contract DSCEngineTest is Test {
         // worth the DSC debt covered.
         // The liquidator does not always receive this bonus but at the minimum they receive
         // collateral worth the DSC debt they're covering.
-        uint256 expectedMinOutput = dscEngine.getTokenAmountFromUSDValue(
-            wBTC,
-            LIQUIDATION_DSC
-        );
-        uint256 maxBonus = (expectedMinOutput * LIQUIDATION_BONUS) /
-            LIQUIDATION_PRECISION;
-        uint256 expectedMaxOutput = expectedMinOutput +
-            maxBonus +
-            wBTCBalBefore;
+        uint256 expectedMinOutput = dscEngine.getTokenAmountFromUSDValue(wBTC, LIQUIDATION_DSC);
+        uint256 maxBonus = (expectedMinOutput * LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
+        uint256 expectedMaxOutput = expectedMinOutput + maxBonus + wBTCBalBefore;
 
         vm.startPrank(TEST_USER_2);
         dsc.approve(address(dscEngine), LIQUIDATION_DSC);
@@ -569,28 +462,19 @@ contract DSCEngineTest is Test {
         liquidatable(TEST_USER_2)
     {
         // dip the price of wBTC to $10.
-        uint256 liquidatorCollateralValueBefore = dscEngine
-            .getAccountCollateralValueInUSD(TEST_USER_1);
+        uint256 liquidatorCollateralValueBefore = dscEngine.getAccountCollateralValueInUSD(TEST_USER_1);
 
         MockV3Aggregator(wBTCUsdPriceFeed).updateAnswer(10e8);
 
-        uint256 liquidatorCollateralValueAfter = dscEngine
-            .getAccountCollateralValueInUSD(TEST_USER_1);
+        uint256 liquidatorCollateralValueAfter = dscEngine.getAccountCollateralValueInUSD(TEST_USER_1);
 
-        uint256 diffToDeposit = liquidatorCollateralValueBefore -
-            liquidatorCollateralValueAfter;
+        uint256 diffToDeposit = liquidatorCollateralValueBefore - liquidatorCollateralValueAfter;
 
-        uint256 diffToDepositInwBTC = dscEngine.getTokenAmountFromUSDValue(
-            wBTC,
-            diffToDeposit
-        );
+        uint256 diffToDepositInwBTC = dscEngine.getTokenAmountFromUSDValue(wBTC, diffToDeposit);
 
         // Mint the difference plus the additional that will be used to mint
         // DSC to liquidate the account.
-        uint256 additionalDSCCollateral = dscEngine.getTokenAmountFromUSDValue(
-            wBTC,
-            LIQUIDATION_COLLATERAL
-        );
+        uint256 additionalDSCCollateral = dscEngine.getTokenAmountFromUSDValue(wBTC, LIQUIDATION_COLLATERAL);
 
         uint256 totalToMint = diffToDepositInwBTC + additionalDSCCollateral;
 

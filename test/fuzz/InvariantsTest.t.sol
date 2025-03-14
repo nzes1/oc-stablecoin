@@ -25,8 +25,7 @@ contract InvariantsTest is StdInvariant, Test {
     function setUp() public {
         deployer = new DeployDSC();
         (dsc, dscEngine, config) = deployer.run();
-        (wETH, wBTC, wETHUsdPriceFeed, wBTCUsdPriceFeed, ) = config
-            .activeChainNetworkConfig();
+        (wETH, wBTC, wETHUsdPriceFeed, wBTCUsdPriceFeed,) = config.activeChainNetworkConfig();
 
         handler = new Handler(dsc, dscEngine);
 
@@ -38,9 +37,7 @@ contract InvariantsTest is StdInvariant, Test {
         fuzzSelectors[1] = Handler.redeemCollateral.selector;
         // fuzzSelectors[2] = Handler.depositAndMintDSC.selector;
 
-        targetSelector(
-            FuzzSelector({addr: address(handler), selectors: fuzzSelectors})
-        );
+        targetSelector(FuzzSelector({addr: address(handler), selectors: fuzzSelectors}));
     }
 
     // Invariant: Total DSC token supply should always be less than the total
