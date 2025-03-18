@@ -8,7 +8,7 @@ contract Storage {
     // DSC decimals
     uint8 internal constant DSC_DECIMALS = 18;
     uint256 internal constant PRECISION = 1e18;
-    uint256 internal constant LIQUIDATION_PRECISION = 1e27;
+    //uint256 internal constant LIQUIDATION_PRECISION = 1e27;
     uint256 internal constant MIN_HEALTH_FACTOR = 1e18;
     uint256 internal constant LIQ_DISCOUNT_START = 3e16; // 3%
     uint256 internal constant LIQ_DISCOUNT_END = 18e15; // 1.8%
@@ -23,14 +23,17 @@ contract Storage {
     uint256 internal constant SECONDS_IN_YEAR = 365 days;
 
     // Vaults per owner per collateral
-    mapping(bytes32 collateralId => mapping(address owner => Structs.Vault)) internal s_vaults;
+    mapping(bytes32 collateralId => mapping(address owner => Structs.Vault))
+        internal s_vaults;
     /**
      * @dev Collaterals and their configs.
      */
-    mapping(bytes32 collateralId => Structs.CollateralConfig) internal s_collaterals;
+    mapping(bytes32 collateralId => Structs.CollateralConfig)
+        internal s_collaterals;
 
     //User balances per collateral Id
-    mapping(bytes32 collId => mapping(address account => uint256 bal)) internal s_collBalances;
+    mapping(bytes32 collId => mapping(address account => uint256 bal))
+        internal s_collBalances;
 
     bytes32[] internal s_collateralIds;
 
@@ -44,12 +47,16 @@ contract Storage {
     // Structs.LiquidationParams internal highRiskParams; // For OC >= 150%
 
     // underwater positions start time
-    mapping(bytes32 collId => mapping(address owner => uint256 timestamp)) internal firstUnderwaterTime;
+    mapping(bytes32 collId => mapping(address owner => uint256 timestamp))
+        internal firstUnderwaterTime;
 
     // Fees collected per collateral type
-    mapping(bytes32 collId => uint256) internal s_totalCollectedFeesPerCollateral;
+    mapping(bytes32 collId => uint256)
+        internal s_totalCollectedFeesPerCollateral;
 
-    mapping(bytes32 collId => uint256) internal s_totalLiquidationPenaltyPerCollateral;
+    mapping(bytes32 collId => uint256)
+        internal s_totalLiquidationPenaltyPerCollateral;
 
-    mapping(bytes32 collateralId => mapping(address owner => Structs.Vault)) internal s_absorbedBadVaults;
+    mapping(bytes32 collateralId => mapping(address owner => Structs.Vault))
+        internal s_absorbedBadVaults;
 }

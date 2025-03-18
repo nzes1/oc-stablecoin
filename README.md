@@ -39,6 +39,8 @@
 The idea behind the “adjusted collateral” is to capture the fact that in a worst‐case liquidation scenario you won’t actually be able to use 100% of your collateral’s current market value. Instead, you only “trust” a fraction of that value to cover the debt. Let me explain with an analogy and then break it down:
 
 When you apply a liquidation threshold (for example, if LIQUIDATION_THRESHOLD is 50 and LIQUIDATION_PRECISION is 100), you’re effectively saying that only 50% of the raw collateral value is “trusted” to back the debt.
+
+Threshold% = (PRECISION * 100) / (over-collateralization%)
 ---
 
 ### **Analogy**
@@ -249,3 +251,16 @@ liq_penalty = debt * LIQ_PENALTY
 and since both are in 18 decimals, the result also needs to be scaled down:
 
 liq_penalty = (debt * LIQ_PENALTY) / 1e18
+
+
+## User flow Actions
+1. Deposit collateral and mint dsc
+   ERC20Like tokens deposit - check ;; restrict zero deposits
+   Ether deposit - check
+   mint dsc - check
+   collateral topups - check
+
+2. Redeem
+   Remove from protocol - check
+   Redeem - check e.g when token coll appreciates 
+   Redeem by burning dsc - 
