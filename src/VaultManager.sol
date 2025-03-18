@@ -24,34 +24,31 @@ contract VaultManager is Storage {
         s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
     }
 
-    function boostVault(bytes32 collId, uint256 collAmount) public {
+    function boostVault(bytes32 collId, uint256 collAmount) external {
         s_collBalances[collId][msg.sender] -= collAmount;
 
         s_vaults[collId][msg.sender].lockedCollateral += collAmount;
     }
 
-    function addToVault(
-        bytes32 collId,
-        uint256 collAmount,
-        uint256 dscAmount
-    ) public {
-        s_collBalances[collId][msg.sender] -= collAmount;
-
-        s_vaults[collId][msg.sender].lockedCollateral += collAmount;
-        s_vaults[collId][msg.sender].dscDebt += dscAmount;
-        s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
-    }
-
-    // function shrinkVault(
+    // function addToVault(
     //     bytes32 collId,
-    //     address owner,
     //     uint256 collAmount,
-    //     uint256 DSCAmount
-    // ) public {
-    //     s_collBalances[collId][owner] += collAmount;
+    //     uint256 dscAmount
+    // ) external {
+    //     // to top -up debt, the accumulated fees has to be collected first.
+    //     // then top-up the debt together with backing collateral
 
-    //     s_vaults[collId][owner].lockedCollateral -= collAmount;
-    //     s_vaults[collId][owner].dscDebt -= DSCAmount;
+    //     // collect accumulated fees
+    //     settleProtocolFees(
+    //         collId,
+    //         msg.sender,
+    //         s_vaults[collId][msg.sender].dscDebt
+    //     );
+    //     s_collBalances[collId][msg.sender] -= collAmount;
+
+    //     s_vaults[collId][msg.sender].lockedCollateral += collAmount;
+    //     s_vaults[collId][msg.sender].dscDebt += dscAmount;
+    //     s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
     // }
 
     function shrinkVaultDebt(

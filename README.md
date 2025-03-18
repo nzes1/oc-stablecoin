@@ -263,4 +263,13 @@ liq_penalty = (debt * LIQ_PENALTY) / 1e18
 2. Redeem
    Remove from protocol - check
    Redeem - check e.g when token coll appreciates 
-   Redeem by burning dsc - 
+   Redeem by burning dsc - check. user has to preapprove the engine prior to burn.
+   Burn - just burning check.
+
+3. Increase and decrease debt
+   add more collateral to support debt - check
+   top-up debt - check
+      needs to add the new coll to support new debt
+      pay fees upto now before addition
+      add debt
+      HF has to maintain

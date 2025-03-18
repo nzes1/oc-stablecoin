@@ -175,12 +175,55 @@ contract DSCEngine is
         bytes32 collId,
         uint256 collAmount,
         uint256 DSCAmount
-    ) public {
+    ) external {
         // begin by burning to reduce debt
-        burnDSC(collId, DSCAmount);
+        // to avoid double check on hf, call directly the internal function.
+        _burnDSC(collId, DSCAmount, msg.sender, msg.sender);
 
         // Then move the collateral specified, but only if hf is not broken
         redeemCollateral(collId, collAmount);
+    }
+
+    // to avoid circle inheritance, this function was moved from the VM contract to the engine here
+    function addToVault(
+        bytes32 collId,
+        uint256 collAmount,
+        uint256 dscAmount
+    ) external {
+        // to top -up debt, the accumulated fees has to be collected first.
+        // then top-up the debt together with backing collateral
+
+        // collect accumulated fees
+        settleProtocolFees(
+            collId,
+            msg.sender,
+            s_vaults[collId][msg.sender].dscDebt
+        );
+
+        // accounting updates
+        s_collBalances[collId][msg.sender] -= collAmount;
+
+        s_vaults[collId][msg.sender].lockedCollateral += collAmount;
+        s_vaults[collId][msg.sender].dscDebt += dscAmount;
+        s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
+
+        // this block is repeated...maybe
+        //HF of vault has to remain healthy
+        (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
+
+        if (!healthy) {
+            revert DSCEngine__HealthFactorBelowThreshold(hf);
+        }
+
+        // otherwise it is healthy so mint actual dsc to user
+        // Mint DSC to user address
+        bool mintStatus = i_DSC.mint(msg.sender, dscAmount);
+
+        if (!mintStatus) {
+            revert DSCEngine__MintingDSCFailed();
+        }
+        //emit
+        emit DscMinted(msg.sender, dscAmount);
     }
 
     function liquidateVault(
@@ -324,9 +367,15 @@ contract DSCEngine is
         _redeemVaultCollateral(collId, collAmount);
     }
 
-    // no health check!!! --- problem because this is a public func
+    // no health check!!! --- problem because this is a public func--corrected
     function burnDSC(bytes32 collId, uint256 DSCAmount) public {
         _burnDSC(collId, DSCAmount, msg.sender, msg.sender);
+
+        // revert if burning breaks HF
+        (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
+        if (!healthy) {
+            revert DSCEngine__HealthFactorBelowThreshold(hf);
+        }
     }
 
     function _redeemVaultCollateral(
@@ -342,7 +391,7 @@ contract DSCEngine is
             revert DSCEngine__HealthFactorBelowThreshold(hf);
         }
 
-        // the transfer the coll to user
+        // then transfer the coll to user
         removeCollateral(collId, collAmount);
     }
 
