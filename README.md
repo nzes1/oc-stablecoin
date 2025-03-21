@@ -270,6 +270,18 @@ liq_penalty = (debt * LIQ_PENALTY) / 1e18
    add more collateral to support debt - check
    top-up debt - check
       needs to add the new coll to support new debt
-      pay fees upto now before addition
+      pay fees upto now before addition - users have to be made aware of this flow that when adding more debt, they will need a little bit extra to cover fees upto then first.
       add debt
       HF has to maintain
+
+4. Liquidate users
+   mark underwater vaults with ability to be the liquidator - check
+   if user can choose to be first liquidator - check
+   liquidator
+    initiates liquidation by confirming vault unhealthy - check
+    settle 1% liquidation penalty - check
+    liquidator rewards in USD - check
+      disounts are calculated properly - check
+      disount rates correct - check ---????confirm with tests
+      reward based on size --check
+   

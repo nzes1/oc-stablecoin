@@ -226,6 +226,24 @@ contract DSCEngine is
         emit DscMinted(msg.sender, dscAmount);
     }
 
+    function markVaultAsUnderwater(
+        bytes32 collId,
+        address owner,
+        bool liquidate, /// UI will have a flow such that a true here introduces the other 2
+        uint256 dsc,
+        bool withdraw
+    ) external {
+        // check for underwater status and mark it
+        bool liquidatable = vaultIsUnderwater(collId, owner);
+
+        // If liquidatable and user had marked to liquidate, then do so
+        if (liquidatable) {
+            if (liquidate) {
+                liquidateVault(collId, owner, dsc, withdraw);
+            }
+        }
+    }
+
     function liquidateVault(
         bytes32 collId,
         address owner,
@@ -239,7 +257,7 @@ contract DSCEngine is
 
         // If above call does not revert, then supplied dsc is enough, take it from liquidator
         // and burn it; but first take liquidation penalty, calculate all rewards that are dependent
-        // on dssc debt since burn will remove/close the debt from vault.
+        // on dsc debt since burn will remove/close the debt from vault.
 
         // Settle penalty first
         settleLiquidationPenalty(collId, owner, dscToRepay);
@@ -311,20 +329,6 @@ contract DSCEngine is
         if (surplus > 0) {
             s_vaults[collId][owner].lockedCollateral -= surplus;
             s_collBalances[collId][owner] += surplus;
-        }
-    }
-
-    function markVaultAsUnderwater(
-        bytes32 collId,
-        address owner,
-        bool liquidate,
-        uint256 dsc,
-        bool withdraw
-    ) public {
-        // check for underwater status and mark it
-        vaultIsUnderwater(collId, owner);
-        if (liquidate) {
-            liquidateVault(collId, owner, dsc, withdraw);
         }
     }
 
