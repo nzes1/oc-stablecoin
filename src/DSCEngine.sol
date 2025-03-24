@@ -79,6 +79,22 @@ contract DSCEngine is
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
     event DscMinted(address indexed owner, uint256 amount);
+    event LiquidationWithFullRewards(
+        bytes32 collId,
+        address owner,
+        address liquidator
+    );
+    event LiquidationWithPartialRewards(
+        bytes32 collId,
+        address owner,
+        address liquidator
+    );
+    event AbsorbedBadDebt(bytes32 collId, address owner);
+    event LiquidationSurplusReturned(
+        bytes32 collId,
+        address owner,
+        uint256 amount
+    );
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -90,11 +106,12 @@ contract DSCEngine is
     error DSCEngine__HealthFactorBelowThreshold(uint256 healthFactor);
 
     error DSCEngine__ZeroAmountNotAllowed();
-    error DSCEngine__AccountNotLiquidatable();
-    error DSCEngine__CollateralConfigurationAlreadySet(bytes32 collateralId);
+    error DSCEngine__CollateralConfigurationAlreadySet(bytes32 collId);
     error DSCEngine__CollateralConfigurationCannotBeRemovedWithOutstandingDebt(
         uint256 debt
     );
+    error DSCEngine__DebtSizeBelowMinimumAmountAllowed(uint256 minDebt);
+    error DSCEngine__InvalidDeploymentInitializationConfigs();
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -111,32 +128,38 @@ contract DSCEngine is
         _;
     }
 
+    modifier isValidDebtSize(uint256 dscAmt) {
+        if (dscAmt < MIN_DEBT) {
+            revert DSCEngine__DebtSizeBelowMinimumAmountAllowed(MIN_DEBT);
+        }
+        _;
+    }
+
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
     /**
      *
-     * @param tokenAddresses A list of addresses of the permitted collateral tokens.
-     * @param priceFeedsAddresses A list of addresses of the chainlink USD price feeds
-     * for the respective collateral tokens.
-     * @param DSCTokenAddress The address of the DSC ERC20 token that uses the logic
+     * @param dscToken The address of the DSC ERC20 token that uses the logic
      * defined in this engine contract.
      */
     constructor(
-        address[] memory tokenAddresses,
-        address[] memory priceFeedsAddresses,
-        address DSCTokenAddress
+        Structs.DeploymentConfig[] memory configs,
+        address dscToken
     ) Ownable(msg.sender) {
-        // if (tokenAddresses.length != priceFeedsAddresses.length) {
-        //     revert DSCEngine__CollateralTokensAddressesAndPriceFeedsAddressesLengthMismatch();
-        // }
+        // Initiliaze collateral configs
+        for (uint256 k = 0; k < configs.length; k++) {
+            // call configurecollateral
+            configureCollateral(
+                configs[k].collId,
+                configs[k].tokenAddr,
+                configs[k].liqThreshold,
+                configs[k].priceFeed,
+                configs[k].decimals
+            );
+        }
 
-        // for (uint256 k = 0; k < tokenAddresses.length; k++) {
-        //     s_priceFeeds[tokenAddresses[k]] = priceFeedsAddresses[k];
-        //     s_collateralTokens.push(tokenAddresses[k]);
-        // }
-
-        i_DSC = DecentralizedStableCoin(DSCTokenAddress);
+        i_DSC = DecentralizedStableCoin(dscToken);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -151,45 +174,45 @@ contract DSCEngine is
      * @dev The amount the user deposits has to be more than zero. The token also has to be
      * allowed as collateral. The function reverts otherwise.
      * @param collId The address of the collateral token.
-     * @param collAmount The amount of collateral tokens to deposit.
-     * @param DSCAmount The amount of DSC tokens to mint.
+     * @param collAmt The amount of collateral tokens to deposit.
+     * @param dscAmt The amount of DSC tokens to mint.
      */
     function depositCollateralAndMintDSC(
         bytes32 collId,
-        uint256 collAmount,
-        uint256 DSCAmount
-    ) external {
-        depositCollateral(collId, collAmount);
-        mintDSC(collId, collAmount, DSCAmount);
+        uint256 collAmt,
+        uint256 dscAmt
+    ) external isValidDebtSize(dscAmt) {
+        depositCollateral(collId, collAmt);
+        _mintDSC(collId, collAmt, dscAmt);
     }
 
     // need inheritance to avoid change of msg.sender
     function depositEtherCollateralAndMintDSC(
-        uint256 DSCAmount
-    ) external payable {
+        uint256 dscAmt
+    ) external payable isValidDebtSize(dscAmt) {
         addEtherCollateral();
-        mintDSC("ETH", msg.value, DSCAmount);
+        _mintDSC("ETH", msg.value, dscAmt);
     }
 
     function redeemCollateralForDSC(
         bytes32 collId,
-        uint256 collAmount,
-        uint256 DSCAmount
+        uint256 collAmt,
+        uint256 dscAmt
     ) external {
         // begin by burning to reduce debt
         // to avoid double check on hf, call directly the internal function.
-        _burnDSC(collId, DSCAmount, msg.sender, msg.sender);
+        _burnDSC(collId, dscAmt, msg.sender, msg.sender);
 
         // Then move the collateral specified, but only if hf is not broken
-        redeemCollateral(collId, collAmount);
+        redeemCollateral(collId, collAmt);
     }
 
     // to avoid circle inheritance, this function was moved from the VM contract to the engine here
     function addToVault(
         bytes32 collId,
-        uint256 collAmount,
-        uint256 dscAmount
-    ) external {
+        uint256 collAmt,
+        uint256 dscAmt
+    ) external isValidDebtSize(dscAmt) {
         // to top -up debt, the accumulated fees has to be collected first.
         // then top-up the debt together with backing collateral
 
@@ -201,10 +224,10 @@ contract DSCEngine is
         );
 
         // accounting updates
-        s_collBalances[collId][msg.sender] -= collAmount;
+        s_collBalances[collId][msg.sender] -= collAmt;
 
-        s_vaults[collId][msg.sender].lockedCollateral += collAmount;
-        s_vaults[collId][msg.sender].dscDebt += dscAmount;
+        s_vaults[collId][msg.sender].lockedCollateral += collAmt;
+        s_vaults[collId][msg.sender].dscDebt += dscAmt;
         s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
 
         // this block is repeated...maybe
@@ -217,19 +240,20 @@ contract DSCEngine is
 
         // otherwise it is healthy so mint actual dsc to user
         // Mint DSC to user address
-        bool mintStatus = i_DSC.mint(msg.sender, dscAmount);
+        bool mintStatus = i_DSC.mint(msg.sender, dscAmt);
 
         if (!mintStatus) {
             revert DSCEngine__MintingDSCFailed();
         }
         //emit
-        emit DscMinted(msg.sender, dscAmount);
+        emit DscMinted(msg.sender, dscAmt);
     }
 
     function markVaultAsUnderwater(
         bytes32 collId,
         address owner,
-        bool liquidate, /// UI will have a flow such that a true here introduces the other 2
+        bool liquidate,
+        /// UI will have a flow such that a true here introduces the other 2
         uint256 dsc,
         bool withdraw
     ) external {
@@ -299,14 +323,14 @@ contract DSCEngine is
         if (vaultCollBal >= totalPayout) {
             s_vaults[collId][owner].lockedCollateral -= totalPayout;
             s_collBalances[collId][liquidator] += totalPayout;
-            //emit
+            emit LiquidationWithFullRewards(collId, owner, liquidator);
         }
         // Partial rewards but full base collateral
         // Important to note that rewards can be zero here too!
         else if (vaultCollBal >= baseCollateral) {
             s_vaults[collId][owner].lockedCollateral -= vaultCollBal; // maybe just set to zero
             s_collBalances[collId][liquidator] += vaultCollBal;
-            //emit
+            emit LiquidationWithPartialRewards(collId, owner, liquidator);
         }
         // Protocol absorbs the vault as bad debt
         else {
@@ -316,7 +340,7 @@ contract DSCEngine is
                 dscDebt: dscToRepay,
                 lastUpdatedAt: block.timestamp
             });
-            //emit
+            emit AbsorbedBadDebt(collId, owner);
         }
 
         // Withdraw
@@ -329,6 +353,7 @@ contract DSCEngine is
         if (surplus > 0) {
             s_vaults[collId][owner].lockedCollateral -= surplus;
             s_collBalances[collId][owner] += surplus;
+            emit LiquidationSurplusReturned(collId, owner, surplus);
         }
     }
 
@@ -343,9 +368,35 @@ contract DSCEngine is
         bytes32 collId,
         uint256 collAmt,
         uint256 dscAmt
-    ) public moreThanZero(dscAmt) nonReentrant {
+    ) public isValidDebtSize(dscAmt) nonReentrant {
+        _mintDSC(collId, collAmt, dscAmt);
+    }
+
+    function redeemCollateral(bytes32 collId, uint256 collAmt) public {
+        _redeemVaultCollateral(collId, collAmt);
+    }
+
+    // no health check!!! --- problem because this is a public func--corrected
+    function burnDSC(bytes32 collId, uint256 dscAmt) public {
+        _burnDSC(collId, dscAmt, msg.sender, msg.sender);
+
+        // revert if burning breaks HF
+        (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
+        if (!healthy) {
+            revert DSCEngine__HealthFactorBelowThreshold(hf);
+        }
+    }
+
+    function _mintDSC(
+        bytes32 collId,
+        uint256 collAmt,
+        uint256 dscAmt
+    ) internal moreThanZero(dscAmt) {
         // increase their debt first
         createVault(collId, collAmt, dscAmt);
+
+        // keep track of debt on global totals
+        s_collaterals[collId].totalDebt += dscAmt;
 
         // Vault has to be overcollateralized as per the set configs for that collateral
         (bool healthy, uint256 healthFactor) = isVaultHealthy(
@@ -367,27 +418,9 @@ contract DSCEngine is
         emit DscMinted(msg.sender, dscAmt);
     }
 
-    function redeemCollateral(bytes32 collId, uint256 collAmount) public {
-        _redeemVaultCollateral(collId, collAmount);
-    }
-
-    // no health check!!! --- problem because this is a public func--corrected
-    function burnDSC(bytes32 collId, uint256 DSCAmount) public {
-        _burnDSC(collId, DSCAmount, msg.sender, msg.sender);
-
-        // revert if burning breaks HF
-        (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
-        if (!healthy) {
-            revert DSCEngine__HealthFactorBelowThreshold(hf);
-        }
-    }
-
-    function _redeemVaultCollateral(
-        bytes32 collId,
-        uint256 collAmount
-    ) internal {
+    function _redeemVaultCollateral(bytes32 collId, uint256 collAmt) internal {
         // shrinking shouldn't affect oc ratio
-        shrinkVaultCollateral(collId, collAmount);
+        shrinkVaultCollateral(collId, collAmt);
 
         (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
 
@@ -396,30 +429,33 @@ contract DSCEngine is
         }
 
         // then transfer the coll to user
-        removeCollateral(collId, collAmount);
+        removeCollateral(collId, collAmt);
     }
 
     function _burnDSC(
         bytes32 collId,
-        uint256 DSCAmount,
+        uint256 dscAmt,
         address burnOnBehalfOf,
         address burnFrom
     ) private {
         // Before burning, fees needs to be collected since the last vault update time
         // to now
-        settleProtocolFees(collId, burnOnBehalfOf, DSCAmount);
+        settleProtocolFees(collId, burnOnBehalfOf, dscAmt);
         // reduce their debt
-        shrinkVaultDebt(collId, burnOnBehalfOf, DSCAmount);
+        shrinkVaultDebt(collId, burnOnBehalfOf, dscAmt);
+
+        // keep track of debt changes on global totals
+        s_collaterals[collId].totalDebt -= dscAmt;
 
         // transfer dsc back to the engine.
-        bool success = i_DSC.transferFrom(burnFrom, address(this), DSCAmount);
+        bool success = i_DSC.transferFrom(burnFrom, address(this), dscAmt);
 
         if (!success) {
             revert DSCEngine__BurningDSCFailed();
         }
 
         /// Now DSCEngine contract burns the DSC tokens.
-        i_DSC.burn(DSCAmount);
+        i_DSC.burn(dscAmt);
     }
 
     function settleProtocolFees(
@@ -483,51 +519,42 @@ contract DSCEngine is
                        COLLATERAL CONFIGURATIONS
     //////////////////////////////////////////////////////////////*/
     // liquidation threshold percentage is the value from
-    // Threshold = (Liquidation precision * 100) / Desired Overcollateralization Ratio (%)
+    // Threshold = (precision * 100) / Desired Overcollateralization Ratio (%)
     // Check Deepseek cchat here: https://chat.deepseek.com/a/chat/s/767f8d14-e4e1-4e89-b313-690da60cefa2
 
     function configureCollateral(
-        bytes32 collateralId,
+        bytes32 collId,
         address tokenAddr,
-        uint256 interestFee,
-        uint256 liquidationThresholdPercentage,
-        uint256 minDebtAllowed,
-        uint256 liquidationRatio,
+        uint256 liqThreshold,
         address priceFeed,
         uint8 tknDecimals
-    ) external onlyOwner {
+    ) public onlyOwner {
         // Only configure supported collateral if not previously set
-        if (s_collaterals[collateralId].tokenAddr != address(0)) {
-            revert DSCEngine__CollateralConfigurationAlreadySet(collateralId);
+        if (s_collaterals[collId].tokenAddr != address(0)) {
+            revert DSCEngine__CollateralConfigurationAlreadySet(collId);
         }
-        s_collateralIds.push(collateralId);
-        s_collaterals[collateralId].tokenAddr = tokenAddr;
-        s_collaterals[collateralId].interestFee = interestFee;
-        s_collaterals[collateralId]
-            .liquidationThresholdPercentage = liquidationThresholdPercentage;
-        s_collaterals[collateralId].minDebtAllowed = minDebtAllowed;
-        s_collaterals[collateralId].liquidationRatio = liquidationRatio;
-        s_collaterals[collateralId].priceFeedAddr = priceFeed;
-
-        s_tokenDecimals[collateralId] = tknDecimals; // should it be removed also at below??
+        s_collateralIds.push(collId);
+        s_collaterals[collId].tokenAddr = tokenAddr;
+        s_collaterals[collId].liqThreshold = liqThreshold;
+        s_collaterals[collId].priceFeed = priceFeed;
+        s_collaterals[collId].totalDebt = 0;
+        s_tokenDecimals[collId] = tknDecimals; // should it be removed also at below??
     }
 
-    function removeCollateralConfiguration(
-        bytes32 collateralId
-    ) external onlyOwner {
-        uint256 outstandingDebt = s_collaterals[collateralId]
-            .totalNormalizedDebt;
+    function removeCollateralConfiguration(bytes32 collId) external onlyOwner {
+        uint256 outstandingDebt = s_collaterals[collId].totalDebt;
         if (outstandingDebt > 0) {
             revert DSCEngine__CollateralConfigurationCannotBeRemovedWithOutstandingDebt(
                 outstandingDebt
             );
         }
 
-        delete s_collaterals[collateralId];
+        delete s_collaterals[collId];
 
         // Gas intensive removal from array of collateral Ids
+        /// this removal needs to be tested....seems incomplete the swap bit
         for (uint256 k = 0; k < s_collateralIds.length; k++) {
-            if (s_collateralIds[k] == collateralId) {
+            if (s_collateralIds[k] == collId) {
                 s_collateralIds[k] = bytes32(s_collateralIds.length - 1);
                 s_collateralIds.pop();
                 break;
@@ -536,9 +563,9 @@ contract DSCEngine is
     }
 
     function getCollateralSettings(
-        bytes32 collateralId
+        bytes32 collId
     ) external view returns (Structs.CollateralConfig memory) {
-        return s_collaterals[collateralId];
+        return s_collaterals[collId];
     }
 
     function getAllowedCollateralIds()
@@ -558,10 +585,10 @@ contract DSCEngine is
     function getVaultInformation(
         bytes32 collId,
         address owner
-    ) external view returns (uint256 collAmount, uint256 dscDebt) {
-        collAmount = s_vaults[collId][owner].lockedCollateral;
+    ) external view returns (uint256 collAmt, uint256 dscDebt) {
+        collAmt = s_vaults[collId][owner].lockedCollateral;
         dscDebt = s_vaults[collId][owner].dscDebt;
 
-        return (collAmount, dscDebt);
+        return (collAmt, dscDebt);
     }
 }

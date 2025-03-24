@@ -284,4 +284,6 @@ liq_penalty = (debt * LIQ_PENALTY) / 1e18
       disounts are calculated properly - check
       disount rates correct - check ---????confirm with tests
       reward based on size --check
+      precision on reward calculations -- check
+      
    

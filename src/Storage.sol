@@ -8,7 +8,7 @@ contract Storage {
     // DSC decimals
     uint8 internal constant DSC_DECIMALS = 18;
     uint256 internal constant PRECISION = 1e18;
-    //uint256 internal constant LIQUIDATION_PRECISION = 1e27;
+    uint256 internal constant MIN_DEBT = 100e18; // 100dsc
     uint256 internal constant MIN_HEALTH_FACTOR = 1e18;
     uint256 internal constant LIQ_DISCOUNT_START = 3e16; // 3%
     uint256 internal constant LIQ_DISCOUNT_END = 18e15; // 1.8%
@@ -23,13 +23,12 @@ contract Storage {
     uint256 internal constant SECONDS_IN_YEAR = 365 days;
 
     // Vaults per owner per collateral
-    mapping(bytes32 collateralId => mapping(address owner => Structs.Vault))
+    mapping(bytes32 collId => mapping(address owner => Structs.Vault))
         internal s_vaults;
     /**
      * @dev Collaterals and their configs.
      */
-    mapping(bytes32 collateralId => Structs.CollateralConfig)
-        internal s_collaterals;
+    mapping(bytes32 collId => Structs.CollateralConfig) internal s_collaterals;
 
     //User balances per collateral Id
     mapping(bytes32 collId => mapping(address account => uint256 bal))
@@ -43,9 +42,6 @@ contract Storage {
     // Cache oracle decimals on first fetch to save on gas for external calls everytime
     mapping(bytes32 collId => Structs.OraclesDecimals) s_oracleDecimals;
 
-    // Structs.LiquidationParams internal lowRiskParams; // For OC < 150%
-    // Structs.LiquidationParams internal highRiskParams; // For OC >= 150%
-
     // underwater positions start time
     mapping(bytes32 collId => mapping(address owner => uint256 timestamp))
         internal firstUnderwaterTime;
@@ -57,6 +53,6 @@ contract Storage {
     mapping(bytes32 collId => uint256)
         internal s_totalLiquidationPenaltyPerCollateral;
 
-    mapping(bytes32 collateralId => mapping(address owner => Structs.Vault))
+    mapping(bytes32 collId => mapping(address owner => Structs.Vault))
         internal s_absorbedBadVaults;
 }

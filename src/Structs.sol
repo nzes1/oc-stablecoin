@@ -5,12 +5,9 @@ pragma solidity 0.8.24;
 library Structs {
     struct CollateralConfig {
         address tokenAddr;
-        uint256 totalNormalizedDebt;
-        uint256 interestFee;
-        uint256 liquidationThresholdPercentage; // set it to 27 decimals...actually go wwith 18 everywhere
-        uint256 minDebtAllowed;
-        uint256 liquidationRatio;
-        address priceFeedAddr;
+        uint256 totalDebt;
+        uint256 liqThreshold; // with 18 decimals
+        address priceFeed;
     }
 
     /**
@@ -27,14 +24,16 @@ library Structs {
         uint256 seizedDebt;
     }
 
-    // struct LiquidationParams {
-    //     uint256 rewardRate;
-    //     uint256 minReward;
-    //     uint256 maxReward;
-    // }
-
     struct OraclesDecimals {
         bool cached;
+        uint8 decimals;
+    }
+
+    struct DeploymentConfig {
+        bytes32 collId;
+        address tokenAddr;
+        uint256 liqThreshold;
+        address priceFeed;
         uint8 decimals;
     }
 }

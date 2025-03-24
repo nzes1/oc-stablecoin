@@ -7,9 +7,9 @@ interface IDSCEngine {
      * @dev Deposit collateral to mint DSC tokens
      * @param tokenAddr Address of the collateral token
      * @param amount Amount of collateral to deposit
-     * @param DSCAmount Amount of DSC tokens to mint
+     * @param dscAmt Amount of DSC tokens to mint
      */
-    function depositCollateralAndMintDSC(address tokenAddr, uint256 amount, uint256 DSCAmount) external;
+    function depositCollateralAndMintDSC(address tokenAddr, uint256 amount, uint256 dscAmt) external;
 
     /**
      * @dev Deposit collateral to mint DSC tokens
@@ -22,9 +22,9 @@ interface IDSCEngine {
      * @dev Redeem collateral for DSC tokens
      * @param tokenAddr Address of the collateral token
      * @param amount Amount of collateral to redeem
-     * @param DSCAmount Amount of DSC tokens to burn
+     * @param dscAmt Amount of DSC tokens to burn
      */
-    function redeemCollateralForDSC(address tokenAddr, uint256 amount, uint256 DSCAmount) external;
+    function redeemCollateralForDSC(address tokenAddr, uint256 amount, uint256 dscAmt) external;
 
     /**
      * @dev Redeem collateral from the system.

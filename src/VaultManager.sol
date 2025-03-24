@@ -11,12 +11,18 @@ import {IERC20 as ERC20Like} from "@openzeppelin/contracts@5.1.0/token/ERC20/IER
 contract VaultManager is Storage {
     using OraclesLibrary for AggregatorV3Interface;
 
+    function boostVault(bytes32 collId, uint256 collAmt) external {
+        s_collBalances[collId][msg.sender] -= collAmt;
+
+        s_vaults[collId][msg.sender].lockedCollateral += collAmt;
+    }
+
     // Creating a vault
     function createVault(
         bytes32 collId,
         uint256 collAmt,
         uint256 dscAmt
-    ) public {
+    ) internal {
         s_collBalances[collId][msg.sender] -= collAmt;
 
         s_vaults[collId][msg.sender].lockedCollateral += collAmt;
@@ -24,56 +30,26 @@ contract VaultManager is Storage {
         s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
     }
 
-    function boostVault(bytes32 collId, uint256 collAmount) external {
-        s_collBalances[collId][msg.sender] -= collAmount;
-
-        s_vaults[collId][msg.sender].lockedCollateral += collAmount;
-    }
-
-    // function addToVault(
-    //     bytes32 collId,
-    //     uint256 collAmount,
-    //     uint256 dscAmount
-    // ) external {
-    //     // to top -up debt, the accumulated fees has to be collected first.
-    //     // then top-up the debt together with backing collateral
-
-    //     // collect accumulated fees
-    //     settleProtocolFees(
-    //         collId,
-    //         msg.sender,
-    //         s_vaults[collId][msg.sender].dscDebt
-    //     );
-    //     s_collBalances[collId][msg.sender] -= collAmount;
-
-    //     s_vaults[collId][msg.sender].lockedCollateral += collAmount;
-    //     s_vaults[collId][msg.sender].dscDebt += dscAmount;
-    //     s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
-    // }
-
     function shrinkVaultDebt(
         bytes32 collId,
         address owner,
-        uint256 DSCAmount
+        uint256 dscAmt
     ) internal {
-        s_vaults[collId][owner].dscDebt -= DSCAmount;
+        s_vaults[collId][owner].dscDebt -= dscAmt;
         s_vaults[collId][owner].lastUpdatedAt = block.timestamp;
     }
 
-    function shrinkVaultCollateral(
-        bytes32 collId,
-        uint256 collAmount
-    ) internal {
-        s_collBalances[collId][msg.sender] += collAmount;
+    function shrinkVaultCollateral(bytes32 collId, uint256 collAmt) internal {
+        s_collBalances[collId][msg.sender] += collAmt;
 
-        s_vaults[collId][msg.sender].lockedCollateral -= collAmount;
+        s_vaults[collId][msg.sender].lockedCollateral -= collAmt;
     }
 
     function vaultDetails(
         bytes32 collId,
         address owner
-    ) internal view returns (uint256 collAmount, uint256 dscDebt) {
-        collAmount = s_vaults[collId][owner].lockedCollateral;
+    ) internal view returns (uint256 collAmt, uint256 dscDebt) {
+        collAmt = s_vaults[collId][owner].lockedCollateral;
         dscDebt = s_vaults[collId][owner].dscDebt;
     }
 
@@ -110,7 +86,7 @@ contract VaultManager is Storage {
         // don't lose precision due to division.
         // so that changes to (vaultCollBalUsd * 18decimals / vaultDebt)
         uint256 trustedVaultCollUsd = (vaultCollBalUsd *
-            s_collaterals[collId].liquidationThresholdPercentage) / PRECISION;
+            s_collaterals[collId].liqThreshold) / PRECISION;
 
         uint256 healthFactorRatio = (trustedVaultCollUsd * PRECISION) /
             vaultDebt;
@@ -142,7 +118,7 @@ contract VaultManager is Storage {
         uint8 collDecimals = s_tokenDecimals[collId];
 
         AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            s_collaterals[collId].priceFeedAddr
+            s_collaterals[collId].priceFeed
         );
 
         (, int256 price, , , ) = priceFeed.latestRoundDataStalenessCheck();
@@ -160,13 +136,13 @@ contract VaultManager is Storage {
     function scaleUsdValueToDSCDecimals(
         bytes32 collId,
         uint256 rawUsdValue
-    ) public returns (uint256 scaledUsdValue) {
+    ) internal returns (uint256 scaledUsdValue) {
         uint8 oracleDecimals;
 
         // only fetch decimals if not saved and cache it if not cached moving forward.
         if (!s_oracleDecimals[collId].cached) {
             AggregatorV3Interface priceFeed = AggregatorV3Interface(
-                s_collaterals[collId].priceFeedAddr
+                s_collaterals[collId].priceFeed
             );
 
             oracleDecimals = priceFeed.decimals();
@@ -206,7 +182,7 @@ contract VaultManager is Storage {
         uint8 collDecimals = s_tokenDecimals[collId];
 
         AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            s_collaterals[collId].priceFeedAddr
+            s_collaterals[collId].priceFeed
         );
 
         (, int256 price, , , ) = priceFeed.latestRoundDataStalenessCheck();
