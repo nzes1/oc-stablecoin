@@ -13,29 +13,17 @@ contract DeployDSC is Script {
         external
         returns (DecentralizedStableCoin, DSCEngine, HelperConfig)
     {
-        // /// prepare arguments for DSCEngine deployment.
-        Structs.DeploymentConfig[] memory collaterals;
+        /// prepare arguments for DSCEngine deployment.
         HelperConfig helper = new HelperConfig();
-        collaterals = helper.getDeploymentConfigs();
-        // (
-        //     address wETH,
-        //     address wBTC,
-        //     address wETHUsdPriceFeed,
-        //     address wBTCUsdPriceFeed,
-        // ) = helperConfig.activeChainNetworkConfig();
-        // tokenAddresses = [wETH, wBTC];
-        // priceFeedAddresses = [wETHUsdPriceFeed, wBTCUsdPriceFeed];
-        // // Deploy the DecentralizedStableCoin and DSCEngine contracts
-        // vm.startBroadcast();
-        // DecentralizedStableCoin dsc = new DecentralizedStableCoin();
-        // DSCEngine engine = new DSCEngine(
-        //     tokenAddresses,
-        //     priceFeedAddresses,
-        //     address(dsc)
-        // );
-        // /// Make DSCEngine the owner of the DecentralizedStableCoin
-        // dsc.transferOwnership(address(engine));
-        // vm.stopBroadcast();
-        // return (dsc, engine, helperConfig);
+        Structs.DeploymentConfig[] memory deploymentConfigs = helper
+            .getConfigs();
+
+        // Deploy the DecentralizedStableCoin and DSCEngine contracts
+        vm.startBroadcast();
+        DecentralizedStableCoin dsc = new DecentralizedStableCoin();
+        DSCEngine engine = new DSCEngine(deploymentConfigs, address(dsc));
+        vm.stopBroadcast();
+
+        return (dsc, engine, helper);
     }
 }
