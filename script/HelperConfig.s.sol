@@ -54,6 +54,18 @@ contract HelperConfig is Script {
         // save to storage then return the struct array afterwards.
         // this avoids creating a local array struct and copying it to storage which solidity
         // compiler currently does not support.
+
+        // ETH and WETH share the price feed and liq thresholds.
+        deploymentConfigs.push(
+            Structs.DeploymentConfig({
+                collId: "ETH",
+                tokenAddr: address(0),
+                liqThreshold: WETH_LIQ_THRESHOLD,
+                priceFeed: 0x694AA1769357215DE4FAC081bf1f309aDC325306, // 8 decimals
+                decimals: 18
+            })
+        );
+
         deploymentConfigs.push(
             Structs.DeploymentConfig({
                 collId: "WETH",
@@ -102,9 +114,9 @@ contract HelperConfig is Script {
         returns (Structs.DeploymentConfig[] memory anvilConfigs)
     {
         // If previosuly deployed mocks exist, return them and not re-deploy
-        // if (deploymentConfigs[0].tokenAddr != address(0)) {
-        //     return deploymentConfigs;
-        // }
+        if (deploymentConfigs.length > 0) {
+            return deploymentConfigs;
+        }
 
         // collateral token mocks
         // the decimals mirror what is on mainnet
@@ -121,7 +133,17 @@ contract HelperConfig is Script {
         MockV3Aggregator daiFeed = new MockV3Aggregator(8, 10001e14); // $1
         vm.stopBroadcast();
 
-        // delete deploymentConfigs;
+        // ETH is also allowed on tests and shares WETH priceFeed
+        deploymentConfigs.push(
+            Structs.DeploymentConfig({
+                collId: "ETH",
+                tokenAddr: address(0),
+                liqThreshold: WETH_LIQ_THRESHOLD,
+                priceFeed: address(wethFeed),
+                decimals: weth.decimals()
+            })
+        );
+
         deploymentConfigs.push(
             Structs.DeploymentConfig({
                 collId: bytes32(bytes(weth.symbol())),

@@ -591,4 +591,11 @@ contract DSCEngine is
 
         return (collAmt, dscDebt);
     }
+
+    function getUserCollateralBalance(
+        bytes32 collId,
+        address user
+    ) external view returns (uint256) {
+        return s_collBalances[collId][user];
+    }
 }
