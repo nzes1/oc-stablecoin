@@ -288,4 +288,8 @@ liq_penalty = (debt * LIQ_PENALTY) / 1e18
       
    
 
-   
+0 ETH
+1 WETH
+2 LINK
+3 USDT
+4 DAI

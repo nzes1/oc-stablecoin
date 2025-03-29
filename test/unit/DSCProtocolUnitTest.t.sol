@@ -10,6 +10,7 @@ import {DeployDSC} from "../../script/DeployDSC.s.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {Structs} from "../../src/Structs.sol";
 import {CollateralManager} from "../../src/CollateralManager.sol";
+import {ERC20Like} from "../mocks/ERC20Like.sol";
 
 contract DSCProtocolUnitTest is Test {
     // Core contracts
@@ -22,6 +23,8 @@ contract DSCProtocolUnitTest is Test {
     address TEST_USER_1 = makeAddr("Test-User-1");
     address TEST_USER_2 = makeAddr("Test-User-1");
     uint256 constant STARTING_ETH_BAL = 10_000 ether;
+    uint256 constant MINT_AMOUNT = 1000_000e18; // 1M tokens
+    uint256 constant DEPOSIT_AMOUNT = 1_000e18;
 
     event CM__CollateralDeposited(
         bytes32 indexed collId,
@@ -82,7 +85,7 @@ contract DSCProtocolUnitTest is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
-                   PROTOCOL ENTRY & VAULT ONBOARDING
+                           PROTOCOL DEPOSITS
     //////////////////////////////////////////////////////////////*/
     function test_SuccessfulEtherDepositIncreasesUserBalance() public {
         uint256 depositAmt = 100 ether;
@@ -129,4 +132,99 @@ contract DSCProtocolUnitTest is Test {
         engine.addEtherCollateral();
         vm.stopPrank();
     }
+
+    function _mint(bytes32 collId, address user) internal {
+        address token = engine.getCollateralAddress(collId);
+        ERC20Like(token).mint(user, MINT_AMOUNT);
+    }
+
+    function _setAllowance(
+        bytes32 collId,
+        address owner,
+        uint256 amount
+    ) internal {
+        address recipient = address(engine);
+        address token = engine.getCollateralAddress(collId);
+        vm.startPrank(owner);
+        ERC20Like(token).approve(recipient, amount);
+        vm.stopPrank();
+    }
+
+    function _deposit(
+        bytes32 collId,
+        address depositor,
+        uint256 amount
+    ) internal {
+        _mint(collId, depositor);
+        _setAllowance(collId, depositor, amount);
+
+        vm.startPrank(depositor);
+        engine.depositCollateral(collId, amount);
+        vm.stopPrank();
+    }
+
+    function test_SuccessfulErc20CollateralDepositIncreasesUserBalance()
+        public
+    {
+        bytes32 link = collIds[2];
+        _deposit(link, TEST_USER_2, DEPOSIT_AMOUNT);
+
+        uint256 bal = engine.getUserCollateralBalance(link, TEST_USER_2);
+
+        assertEq(bal, DEPOSIT_AMOUNT);
+    }
+
+    function test_RevertWhenDepositingZeroAmountErc20Tokens() public {
+        bytes32 usdt = collIds[3];
+
+        vm.expectRevert(CollateralManager.CM__ZeroAmountNotAllowed.selector);
+        vm.startPrank(TEST_USER_2);
+        engine.depositCollateral(usdt, 0);
+        vm.stopPrank();
+    }
+
+    function test_RevertWhenAttemptingToDepositUnconfigurdErc20Token() public {
+        // Create a token
+        ERC20Like ARB = new ERC20Like("Arbitrum", "ARB", 18);
+
+        vm.startPrank(TEST_USER_2);
+        ARB.mint(TEST_USER_2, MINT_AMOUNT);
+        ARB.approve(address(engine), DEPOSIT_AMOUNT);
+        bytes32 tokenId = bytes32(bytes(ARB.symbol()));
+
+        vm.expectRevert(
+            CollateralManager.CM__CollateralTokenNotApproved.selector
+        );
+
+        engine.depositCollateral(tokenId, DEPOSIT_AMOUNT);
+        vm.stopPrank();
+    }
+
+    function test_SuccessfulErc20CollateralDepositEmits() public {
+        bytes32 dai = collIds[3];
+
+        vm.recordLogs();
+        _deposit(dai, TEST_USER_2, DEPOSIT_AMOUNT);
+
+        Vm.Log[] memory emits = vm.getRecordedLogs();
+
+        // Last event is the one from the engine
+        assertEq(
+            emits[emits.length - 1].topics[0],
+            keccak256("CM__CollateralDeposited(bytes32,address,uint256)")
+        );
+
+        assertEq(
+            address(uint160(uint256(emits[emits.length - 1].topics[2]))),
+            TEST_USER_2
+        );
+        assertEq(
+            abi.decode(emits[emits.length - 1].data, (uint256)),
+            DEPOSIT_AMOUNT
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                      DEPOSITS & VAULTS ONBOARDING
+    //////////////////////////////////////////////////////////////*/
 }
