@@ -24,7 +24,9 @@ contract DeployDSC is Script {
         DSCEngine engine = new DSCEngine(deploymentConfigs, address(dsc));
 
         // change engine owner immediately to this deployer
+        // Also change the owner of the dsc to the engine contract
         engine.transferOwnership(address(this));
+        dsc.transferOwnership(address(engine));
         vm.stopBroadcast();
 
         return (dsc, engine, helper);

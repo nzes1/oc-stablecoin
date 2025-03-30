@@ -387,11 +387,12 @@ contract DSCEngine is
         }
     }
 
+    // morethanzero not needed here, is validsize already in mintDSC public one
     function _mintDSC(
         bytes32 collId,
         uint256 collAmt,
         uint256 dscAmt
-    ) internal moreThanZero(dscAmt) {
+    ) internal {
         // increase their debt first
         createVault(collId, collAmt, dscAmt);
 
@@ -597,5 +598,9 @@ contract DSCEngine is
         address user
     ) external view returns (uint256) {
         return s_collBalances[collId][user];
+    }
+
+    function getTotalDscDebt(bytes32 collId) external view returns (uint256) {
+        return s_collaterals[collId].totalDebt;
     }
 }

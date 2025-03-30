@@ -12,6 +12,12 @@ import {Structs} from "../../src/Structs.sol";
 import {CollateralManager} from "../../src/CollateralManager.sol";
 import {ERC20Like} from "../mocks/ERC20Like.sol";
 
+// 0 ETH
+// 1 WETH
+// 2 LINK
+// 3 USDT
+// 4 DAI
+
 contract DSCProtocolUnitTest is Test {
     // Core contracts
     DeployDSC deployer;
@@ -134,6 +140,7 @@ contract DSCProtocolUnitTest is Test {
     }
 
     function _mint(bytes32 collId, address user) internal {
+        require(collId != "ETH", "Expected ERC20 Like token - ether supplied");
         address token = engine.getCollateralAddress(collId);
         ERC20Like(token).mint(user, MINT_AMOUNT);
     }
@@ -143,6 +150,7 @@ contract DSCProtocolUnitTest is Test {
         address owner,
         uint256 amount
     ) internal {
+        require(collId != "ETH", "Expected ERC20 Like token - ether supplied");
         address recipient = address(engine);
         address token = engine.getCollateralAddress(collId);
         vm.startPrank(owner);
@@ -155,6 +163,7 @@ contract DSCProtocolUnitTest is Test {
         address depositor,
         uint256 amount
     ) internal {
+        require(collId != "ETH", "Expected ERC20 Like token - ether supplied");
         _mint(collId, depositor);
         _setAllowance(collId, depositor, amount);
 
@@ -227,4 +236,109 @@ contract DSCProtocolUnitTest is Test {
     /*//////////////////////////////////////////////////////////////
                       DEPOSITS & VAULTS ONBOARDING
     //////////////////////////////////////////////////////////////*/
+    function test_MintingDscOnlySucceedsIfMinimumAmountIsMet() public {
+        bytes32 link = collIds[2];
+        uint256 dscAmt = 50e18; // less than Min allowed debt size
+        _mint(link, TEST_USER_2);
+
+        vm.expectPartialRevert(
+            DSCEngine.DSCEngine__DebtSizeBelowMinimumAmountAllowed.selector
+        );
+
+        // Minimum mint amount is 100 dsc
+        // Try to open a vault with all link deposited but mint dsc that is less than 100
+        vm.startPrank(TEST_USER_2);
+        engine.depositCollateralAndMintDSC(link, DEPOSIT_AMOUNT, dscAmt);
+        vm.stopPrank();
+    }
+
+    function test_MintingDscCorrectlyUpdatesInternalTreasuryRecords() public {
+        bytes32 weth = collIds[1];
+        // OC of 170% permits upto around 1185 dsc for 1 Weth which is worth ~ $2016 (from pricefeed configs)
+        uint256 dscAmt = 1185e18;
+        uint256 wethAmt = 1e18; // 450 dsc needs about 765 weth
+        _deposit(weth, TEST_USER_2, DEPOSIT_AMOUNT);
+
+        vm.startPrank(TEST_USER_2);
+        engine.mintDSC(weth, wethAmt, dscAmt);
+        vm.stopPrank();
+
+        uint256 collateralBal = engine.getUserCollateralBalance(
+            weth,
+            TEST_USER_2
+        );
+
+        (uint256 vaultColl, uint256 vaultDsc) = engine.getVaultInformation(
+            weth,
+            TEST_USER_2
+        );
+
+        uint256 userDscBal = dsc.balanceOf(TEST_USER_2);
+        uint256 totalDscSupply = engine.getTotalDscDebt(weth);
+
+        assertEq(collateralBal, DEPOSIT_AMOUNT - wethAmt);
+        assertEq(vaultColl, wethAmt);
+        assertEq(vaultDsc, dscAmt);
+        assertEq(vaultDsc, userDscBal);
+        assertEq(totalDscSupply, userDscBal);
+        assertEq(DEPOSIT_AMOUNT, vaultColl + collateralBal);
+    }
+
+    function test_RevertWhenMintingDscBreaksHealthFactor() public {
+        bytes32 usdt = collIds[3];
+        // max mint out of 1000 usdt is 833.3
+        // 834 breaks the OC ratio which render the HF broken
+        // remember usdt has 6 decimals, so to lock 1000 usdt into a vault
+        // that is 1000e6. A lot will be deposited though
+        uint256 dscAmt = 834e18;
+        uint256 usdtAmt = 1000e6;
+        _deposit(usdt, TEST_USER_2, DEPOSIT_AMOUNT);
+
+        vm.expectPartialRevert(
+            DSCEngine.DSCEngine__HealthFactorBelowThreshold.selector
+        );
+        vm.startPrank(TEST_USER_2);
+        engine.mintDSC(usdt, usdtAmt, dscAmt);
+        vm.stopPrank();
+    }
+
+    function test_MintingDscEmits() public {
+        bytes32 dai = collIds[4];
+        uint256 daiAmt = 900e18;
+        uint256 dscAmt = 800e18;
+
+        _deposit(dai, TEST_USER_2, DEPOSIT_AMOUNT);
+
+        vm.expectEmit(true, true, true, true, address(engine));
+        emit DSCEngine.DscMinted(TEST_USER_2, dscAmt);
+
+        vm.startPrank(TEST_USER_2);
+        engine.mintDSC(dai, daiAmt, dscAmt);
+        vm.stopPrank();
+
+        uint256 dscBal = dsc.balanceOf(TEST_USER_2);
+        (uint256 vaultColl, uint256 vaultDsc) = engine.getVaultInformation(
+            dai,
+            TEST_USER_2
+        );
+
+        assertEq(dscBal, vaultDsc);
+        assertEq(
+            vaultColl + engine.getUserCollateralBalance(dai, TEST_USER_2),
+            DEPOSIT_AMOUNT
+        );
+        assertEq(vaultColl, daiAmt);
+    }
+
+    function test_UserCanMintDscByDepositingEtherAsCollateral() public {
+        uint256 etherAmt = 100 ether;
+        uint256 dscAmt = 100_000e18; // max of ~ 118588dsc is mintable with 100 ether collateral
+
+        vm.expectEmit(true, true, true, true, address(engine));
+        emit DSCEngine.DscMinted(TEST_USER_2, dscAmt);
+
+        vm.startPrank(TEST_USER_2);
+        engine.depositEtherCollateralAndMintDSC{value: etherAmt}(dscAmt);
+        vm.stopPrank();
+    }
 }
