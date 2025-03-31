@@ -302,7 +302,7 @@ contract DSCProtocolUnitTest is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
-                       WITHDRAWALS & BURNING DSC
+                              WITHDRAWALS
     //////////////////////////////////////////////////////////////*/
     function _depositCollateralAndMintDsc(
         bytes32 collId,
@@ -403,7 +403,7 @@ contract DSCProtocolUnitTest is Test {
         assertEq(abi.decode(emits[1].data, (uint256)), 20_000e6);
     }
 
-    function test_UserCanWithdrwaUnlockedEtherCollateralBalance() public {
+    function test_UserCanWithdrawUnlockedEtherCollateralBalance() public {
         bytes32 eth = collIds[0];
         uint256 ethAmt = 150 ether;
         uint256 lockAmt = 60 ether;
@@ -426,5 +426,95 @@ contract DSCProtocolUnitTest is Test {
 
         assertEq(ethAfterWithdrawal, ethBeforeDeposit - lockAmt);
         assertEq(ethAfterWithdrawal, ethBeforeWithdrawal + 90 ether);
+    }
+
+    function test_RevertWhenWithdrawalOfUnlockedEtherCollateralFails() public {
+        bytes32 eth = collIds[0];
+        uint256 ethAmt = 2 ether;
+        uint256 dscAmt = 1100e18;
+        uint256 lockAmt = 1 ether;
+
+        // Simulate withdrawal to a dummy contract address
+        address dummyContract = makeAddr("dummyContract");
+        Dummy dummy = new Dummy();
+        bytes memory dummyCode = address(dummy).code;
+        vm.etch(dummyContract, dummyCode); // Setting the code to that of dummy contract
+
+        vm.deal(dummyContract, 5 ether); // setting contract balance to 5 ether
+
+        vm.startPrank(dummyContract);
+        engine.addEtherCollateral{value: ethAmt}();
+        engine.mintDSC(eth, lockAmt, dscAmt); // user still has 1 ether that is unlocked
+        vm.stopPrank();
+
+        uint256 ethBeforeWithdrawal = address(dummyContract).balance;
+
+        vm.expectRevert(bytes("Ether Transfer Failed"));
+        vm.startPrank(dummyContract);
+        engine.removeCollateral(eth, 1 ether);
+        vm.stopPrank();
+
+        uint256 ethAfterWithdrawal = address(dummyContract).balance;
+
+        assertEq(ethBeforeWithdrawal, ethAfterWithdrawal);
+        assertEq(engine.getUserCollateralBalance(eth, address(dummyContract)), 1 ether);
+    }
+
+    function test_UserCanRedeemExcessCollateralFromVault() public {
+        // Arrange act assertions
+        bytes32 dai = collIds[4];
+        uint256 daiAmt = 30_000e18;
+        uint256 lockAmt = 25_000e18;
+        uint256 dscAmt = 20_000e18;
+        uint256 excessLocked = 2_000e18;
+
+        // Open vault with excess of ~2.3k dai
+        // OC is 110% and with 25k dai, can mint ~ 22727 dsc
+        _depositCollateralAndMintDsc(dai, TEST_USER_2, daiAmt, lockAmt, dscAmt);
+
+        address daiAddr = engine.getCollateralAddress(dai);
+        uint256 daiBefore = ERC20Like(daiAddr).balanceOf(TEST_USER_2);
+
+        // Redeem sends the excess back to user's wallet and not internal treasury records
+        vm.startPrank(TEST_USER_2);
+        engine.redeemCollateral(dai, excessLocked);
+        vm.stopPrank();
+
+        uint256 daiAfter = ERC20Like(daiAddr).balanceOf(TEST_USER_2);
+
+        // Redeemed collateral hits their wallet
+        assertEq(daiAfter, daiBefore + excessLocked);
+    }
+
+    function test_RevertWhenUserAttemptsToRemoveExcessVaultCollateralThatBreaksHealthFactor() public {
+        // Arrange act assertions
+        bytes32 dai = collIds[4];
+        uint256 daiAmt = 30_000e18;
+        uint256 lockAmt = 25_000e18; // worth $25002 because dai was valued at $1.0001
+        uint256 dscAmt = 20_000e18; // needs around 22k dai
+
+        // Open vault with excess of ~2.3k dai
+        // OC is 110% and with 25k dai, can mint ~ 22727 dsc
+        _depositCollateralAndMintDsc(dai, TEST_USER_2, daiAmt, lockAmt, dscAmt);
+
+        vm.expectPartialRevert(DSCEngine.DSCEngine__HealthFactorBelowThreshold.selector);
+
+        // Excess is ~ $3002 worth of dai which is around 3000 dai
+        // Attempting to redeem 3010 dai will revert as that breaks HF.
+        vm.startPrank(TEST_USER_2);
+        engine.redeemCollateral(dai, 3010e18);
+        vm.stopPrank();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                     BURNING TOKENS & VAULT CLOSURE
+    //////////////////////////////////////////////////////////////*/
+}
+
+contract Dummy {
+    uint8 num;
+
+    constructor() {
+        num = 10;
     }
 }

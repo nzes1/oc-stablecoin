@@ -103,7 +103,7 @@ contract HelperConfig is Script {
     }
 
     function setOrCreateAnvilChainNetworkConfig() internal returns (Structs.DeploymentConfig[] memory anvilConfigs) {
-        // If previosuly deployed mocks exist, return them and not re-deploy
+        // If previously deployed mocks exist, return them and not re-deploy
         if (deploymentConfigs.length > 0) {
             return deploymentConfigs;
         }
@@ -120,7 +120,7 @@ contract HelperConfig is Script {
         MockV3Aggregator wethFeed = new MockV3Aggregator(8, 201635e6); // $2016.35
         MockV3Aggregator linkFeed = new MockV3Aggregator(8, 1474e6); // $14.74
         MockV3Aggregator usdtFeed = new MockV3Aggregator(18, 10001e14); // $1
-        MockV3Aggregator daiFeed = new MockV3Aggregator(8, 10001e14); // $1
+        MockV3Aggregator daiFeed = new MockV3Aggregator(8, 10001e4); // $1
         vm.stopBroadcast();
 
         // ETH is also allowed on tests and shares WETH priceFeed

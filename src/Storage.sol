@@ -37,7 +37,7 @@ contract Storage {
     // decimals of tokens
     mapping(bytes32 tkn => uint8) internal s_tokenDecimals;
 
-    // Cache oracle decimals on first fetch to save on gas for external calls everytime
+    // Cache oracle decimals on first fetch to save on gas for external calls every time
     mapping(bytes32 collId => Structs.OraclesDecimals) s_oracleDecimals;
 
     // underwater positions start time

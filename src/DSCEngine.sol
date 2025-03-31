@@ -500,4 +500,8 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
     function getTotalDscDebt(bytes32 collId) external view returns (uint256) {
         return s_collaterals[collId].totalDebt;
     }
+
+    function getHealthFactor(bytes32 collId, address user) external returns (bool, uint256) {
+        return isVaultHealthy(collId, user);
+    }
 }
