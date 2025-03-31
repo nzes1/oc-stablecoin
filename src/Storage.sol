@@ -23,16 +23,14 @@ contract Storage {
     uint256 internal constant SECONDS_IN_YEAR = 365 days;
 
     // Vaults per owner per collateral
-    mapping(bytes32 collId => mapping(address owner => Structs.Vault))
-        internal s_vaults;
+    mapping(bytes32 collId => mapping(address owner => Structs.Vault)) internal s_vaults;
     /**
      * @dev Collaterals and their configs.
      */
     mapping(bytes32 collId => Structs.CollateralConfig) internal s_collaterals;
 
     //User balances per collateral Id
-    mapping(bytes32 collId => mapping(address account => uint256 bal))
-        internal s_collBalances;
+    mapping(bytes32 collId => mapping(address account => uint256 bal)) internal s_collBalances;
 
     bytes32[] internal s_collateralIds;
 
@@ -43,16 +41,12 @@ contract Storage {
     mapping(bytes32 collId => Structs.OraclesDecimals) s_oracleDecimals;
 
     // underwater positions start time
-    mapping(bytes32 collId => mapping(address owner => uint256 timestamp))
-        internal firstUnderwaterTime;
+    mapping(bytes32 collId => mapping(address owner => uint256 timestamp)) internal firstUnderwaterTime;
 
     // Fees collected per collateral type
-    mapping(bytes32 collId => uint256)
-        internal s_totalCollectedFeesPerCollateral;
+    mapping(bytes32 collId => uint256) internal s_totalCollectedFeesPerCollateral;
 
-    mapping(bytes32 collId => uint256)
-        internal s_totalLiquidationPenaltyPerCollateral;
+    mapping(bytes32 collId => uint256) internal s_totalLiquidationPenaltyPerCollateral;
 
-    mapping(bytes32 collId => mapping(address owner => Structs.Vault))
-        internal s_absorbedBadVaults;
+    mapping(bytes32 collId => mapping(address owner => Structs.Vault)) internal s_absorbedBadVaults;
 }

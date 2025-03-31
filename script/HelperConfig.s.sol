@@ -31,11 +31,7 @@ contract HelperConfig is Script {
         }
     }
 
-    function getConfigs()
-        public
-        view
-        returns (Structs.DeploymentConfig[] memory sepoliaConfigs)
-    {
+    function getConfigs() public view returns (Structs.DeploymentConfig[] memory sepoliaConfigs) {
         return deploymentConfigs;
     }
 
@@ -43,10 +39,7 @@ contract HelperConfig is Script {
      * @dev Returns the configuration for the Sepolia network.
      * @return sepoliaConfigs struct array with the configuration for Sepolia.
      */
-    function setSepoliaEthConfig()
-        internal
-        returns (Structs.DeploymentConfig[] memory sepoliaConfigs)
-    {
+    function setSepoliaEthConfig() internal returns (Structs.DeploymentConfig[] memory sepoliaConfigs) {
         /// price feeds are picked the original feeds not the wrapped ones. e.g.
         /// the price feed for WETH is that of ETH/USD not WETH/USD as this
         /// does not exist on Sepolia.
@@ -109,10 +102,7 @@ contract HelperConfig is Script {
         return deploymentConfigs;
     }
 
-    function setOrCreateAnvilChainNetworkConfig()
-        internal
-        returns (Structs.DeploymentConfig[] memory anvilConfigs)
-    {
+    function setOrCreateAnvilChainNetworkConfig() internal returns (Structs.DeploymentConfig[] memory anvilConfigs) {
         // If previosuly deployed mocks exist, return them and not re-deploy
         if (deploymentConfigs.length > 0) {
             return deploymentConfigs;

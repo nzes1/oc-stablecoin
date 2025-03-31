@@ -18,11 +18,7 @@ contract VaultManager is Storage {
     }
 
     // Creating a vault
-    function createVault(
-        bytes32 collId,
-        uint256 collAmt,
-        uint256 dscAmt
-    ) internal {
+    function createVault(bytes32 collId, uint256 collAmt, uint256 dscAmt) internal {
         s_collBalances[collId][msg.sender] -= collAmt;
 
         s_vaults[collId][msg.sender].lockedCollateral += collAmt;
@@ -30,11 +26,7 @@ contract VaultManager is Storage {
         s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
     }
 
-    function shrinkVaultDebt(
-        bytes32 collId,
-        address owner,
-        uint256 dscAmt
-    ) internal {
+    function shrinkVaultDebt(bytes32 collId, address owner, uint256 dscAmt) internal {
         s_vaults[collId][owner].dscDebt -= dscAmt;
         s_vaults[collId][owner].lastUpdatedAt = block.timestamp;
     }
@@ -45,19 +37,13 @@ contract VaultManager is Storage {
         s_vaults[collId][msg.sender].lockedCollateral -= collAmt;
     }
 
-    function vaultDetails(
-        bytes32 collId,
-        address owner
-    ) internal view returns (uint256 collAmt, uint256 dscDebt) {
+    function vaultDetails(bytes32 collId, address owner) internal view returns (uint256 collAmt, uint256 dscDebt) {
         collAmt = s_vaults[collId][owner].lockedCollateral;
         dscDebt = s_vaults[collId][owner].dscDebt;
     }
 
-    function isVaultHealthy(
-        bytes32 collId,
-        address owner
-    ) internal returns (bool safe, uint256 healthFactor) {
-        // ratio of coll -> dscdebt for this coll
+    function isVaultHealthy(bytes32 collId, address owner) internal returns (bool safe, uint256 healthFactor) {
+        // ratio of coll -> dsc debt for this coll
         // get coll value and compare to debt
         // ratio should be at minimum 1e18
 
@@ -81,23 +67,18 @@ contract VaultManager is Storage {
         // both have 18 decimals i.e. the coll in usd and DSC
         // To maintain the decimals for the health factor, then the result needs to be
         // scaled up with 18 decimals. The ratio automatically  removes the decimals.
-        // SO scalling result up is like (vaultCollBalUsd / vaultDebt) * 18decimals.
+        // SO scaling result up is like (vaultCollBalUsd / vaultDebt) * 18decimals.
         // But it's always recommended to do multiplication before division so that you
         // don't lose precision due to division.
         // so that changes to (vaultCollBalUsd * 18decimals / vaultDebt)
-        uint256 trustedVaultCollUsd = (vaultCollBalUsd *
-            s_collaterals[collId].liqThreshold) / PRECISION;
+        uint256 trustedVaultCollUsd = (vaultCollBalUsd * s_collaterals[collId].liqThreshold) / PRECISION;
 
-        uint256 healthFactorRatio = (trustedVaultCollUsd * PRECISION) /
-            vaultDebt;
+        uint256 healthFactorRatio = (trustedVaultCollUsd * PRECISION) / vaultDebt;
 
         return (healthFactorRatio >= MIN_HEALTH_FACTOR, healthFactorRatio);
     }
 
-    function getVaultCollateralUsdValue(
-        bytes32 collId,
-        address owner
-    ) public returns (uint256 usdValue) {
+    function getVaultCollateralUsdValue(bytes32 collId, address owner) public returns (uint256 usdValue) {
         uint256 vaultBal;
         uint256 rawUsdValue;
         uint256 scaledUpUsdValue;
@@ -110,20 +91,15 @@ contract VaultManager is Storage {
         return scaledUpUsdValue;
     }
 
-    function getRawUsdValue(
-        bytes32 collId,
-        uint256 amount
-    ) public view returns (uint256 rawUsdValue) {
+    function getRawUsdValue(bytes32 collId, uint256 amount) public view returns (uint256 rawUsdValue) {
         // Decimals of collaterals => to use in rep one token of the collateral
         uint8 collDecimals = s_tokenDecimals[collId];
 
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            s_collaterals[collId].priceFeed
-        );
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_collaterals[collId].priceFeed);
 
-        (, int256 price, , , ) = priceFeed.latestRoundDataStalenessCheck();
+        (, int256 price,,,) = priceFeed.latestRoundDataStalenessCheck();
 
-        // raw USD value = (amount * price) / 10 ** colldecimals
+        // raw USD value = (amount * price) / 10 ** coll decimals
         // The idea is that one token is represented as 10^(tokenDecimals).
         // i.e. usdValueOfTokens = (amountOfTokens * oraclePrice) / oneTokenInFullDecimalsForThatToken;
 
@@ -133,17 +109,15 @@ contract VaultManager is Storage {
         return rawUsdValue;
     }
 
-    function scaleUsdValueToDSCDecimals(
-        bytes32 collId,
-        uint256 rawUsdValue
-    ) internal returns (uint256 scaledUsdValue) {
+    function scaleUsdValueToDSCDecimals(bytes32 collId, uint256 rawUsdValue)
+        internal
+        returns (uint256 scaledUsdValue)
+    {
         uint8 oracleDecimals;
 
         // only fetch decimals if not saved and cache it if not cached moving forward.
         if (!s_oracleDecimals[collId].cached) {
-            AggregatorV3Interface priceFeed = AggregatorV3Interface(
-                s_collaterals[collId].priceFeed
-            );
+            AggregatorV3Interface priceFeed = AggregatorV3Interface(s_collaterals[collId].priceFeed);
 
             oracleDecimals = priceFeed.decimals();
 
@@ -155,9 +129,7 @@ contract VaultManager is Storage {
 
         // Scale up if oracle decimals are lower than DSC's 18.
         if (oracleDecimals < DSC_DECIMALS) {
-            scaledUsdValue =
-                rawUsdValue *
-                (10 ** (DSC_DECIMALS - oracleDecimals));
+            scaledUsdValue = rawUsdValue * (10 ** (DSC_DECIMALS - oracleDecimals));
 
             return scaledUsdValue;
         }
@@ -166,10 +138,7 @@ contract VaultManager is Storage {
         return rawUsdValue;
     }
 
-    function getTokenAmountFromUsdValue2(
-        bytes32 collId,
-        uint256 usdValue
-    ) internal returns (uint256 tokenAmount) {
+    function getTokenAmountFromUsdValue2(bytes32 collId, uint256 usdValue) internal returns (uint256 tokenAmount) {
         // The formula for getting the token amount is the opposite for getting usd value
         // given price P, usd value as U and decimals as D:
         // 1 token will be represented as 1D which means 1eD 1 expressed in the decimals
@@ -181,17 +150,12 @@ contract VaultManager is Storage {
         // already be scaled up to DSC decimals, then the price needs to be scaled up to 18 decimals too.
         uint8 collDecimals = s_tokenDecimals[collId];
 
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            s_collaterals[collId].priceFeed
-        );
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_collaterals[collId].priceFeed);
 
-        (, int256 price, , , ) = priceFeed.latestRoundDataStalenessCheck();
+        (, int256 price,,,) = priceFeed.latestRoundDataStalenessCheck();
 
         // First scale price to match decimals of the value being inputted
-        uint256 scaledUpPrice = scaleUsdValueToDSCDecimals(
-            collId,
-            uint256(price)
-        );
+        uint256 scaledUpPrice = scaleUsdValueToDSCDecimals(collId, uint256(price));
 
         tokenAmount = (usdValue * (10 ** collDecimals)) / scaledUpPrice;
 

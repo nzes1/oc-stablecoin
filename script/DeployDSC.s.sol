@@ -9,14 +9,10 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 import {Structs} from "../src/Structs.sol";
 
 contract DeployDSC is Script {
-    function run()
-        external
-        returns (DecentralizedStableCoin, DSCEngine, HelperConfig)
-    {
+    function run() external returns (DecentralizedStableCoin, DSCEngine, HelperConfig) {
         /// prepare arguments for DSCEngine deployment.
         HelperConfig helper = new HelperConfig();
-        Structs.DeploymentConfig[] memory deploymentConfigs = helper
-            .getConfigs();
+        Structs.DeploymentConfig[] memory deploymentConfigs = helper.getConfigs();
 
         // Deploy the DecentralizedStableCoin and DSCEngine contracts
         vm.startBroadcast();
