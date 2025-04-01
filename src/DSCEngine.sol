@@ -48,6 +48,8 @@ import {Storage} from "./Storage.sol";
 import {Fees} from "./Fees.sol";
 import {Liquidations} from "./Liquidation.sol";
 
+import {console} from "forge-std/console.sol";
+
 contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager, VaultManager, Liquidations {
     /*//////////////////////////////////////////////////////////////
                                  TYPES
@@ -404,6 +406,7 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         // to enforce HF. So the calling function needs to check the HF
 
         // decrement locked collateral by the fee.
+
         s_vaults[collId][owner].lockedCollateral -= feeTokenAmount;
 
         // Increment the fees collected by the same amount.
@@ -503,5 +506,9 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
 
     function getHealthFactor(bytes32 collId, address user) external returns (bool, uint256) {
         return isVaultHealthy(collId, user);
+    }
+
+    function calculateFees(uint256 debt, uint256 debtPeriod) external pure returns (uint256) {
+        return calculateProtocolFee(debt, debtPeriod);
     }
 }

@@ -138,7 +138,7 @@ contract VaultManager is Storage {
         return rawUsdValue;
     }
 
-    function getTokenAmountFromUsdValue2(bytes32 collId, uint256 usdValue) internal returns (uint256 tokenAmount) {
+    function getTokenAmountFromUsdValue2(bytes32 collId, uint256 usdValue) public returns (uint256 tokenAmount) {
         // The formula for getting the token amount is the opposite for getting usd value
         // given price P, usd value as U and decimals as D:
         // 1 token will be represented as 1D which means 1eD 1 expressed in the decimals

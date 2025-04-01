@@ -11,6 +11,7 @@ import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {Structs} from "../../src/Structs.sol";
 import {CollateralManager} from "../../src/CollateralManager.sol";
 import {ERC20Like} from "../mocks/ERC20Like.sol";
+import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
 // 0 ETH
 // 1 WETH
@@ -509,6 +510,48 @@ contract DSCProtocolUnitTest is Test {
     /*//////////////////////////////////////////////////////////////
                      BURNING TOKENS & VAULT CLOSURE
     //////////////////////////////////////////////////////////////*/
+
+    function test_UsersCanSuccessfullyBurnTheirTokensProvidedHFDoesNotBreakAfterFeesAreCollected() public {
+        bytes32 link = collIds[2];
+        uint256 linkAmt = 1000e18;
+        uint256 lockAmt = 900e18;
+        uint256 dscAmt = 500e18; // Requires ~ 800 link
+        uint256 oneYear = 365 days;
+
+        _depositCollateralAndMintDsc(link, TEST_USER_1, linkAmt, lockAmt, dscAmt);
+
+        // A buffer of 100 link already exists: 500 dsc => 800 link
+        // for an OC of 160%.
+        // This buffer will be used for fees. Assuming a debt period of 1 year = 365 days
+        // Max fee of 1% = 1% * 500 dsc = 5 dsc =~ $5 worth of link =~ 0.38875 link
+        // Fees = (APR  * debt * time) / (1 Yr * Precision )
+        // Precision used to scale down the 36 decimals resulting from * APR and ebt
+        uint256 expectedFees = (1e16 * dscAmt * oneYear) / (oneYear * 1e18);
+        uint256 calculatedFees = engine.calculateFees(dscAmt, oneYear);
+        address linkFeed = engine.getCollateralSettings(link).priceFeed;
+        uint256 linkBefore = dsc.balanceOf(TEST_USER_1);
+
+        vm.startPrank(TEST_USER_1);
+        // Approve engine to use dsc
+        dsc.approve(address(engine), dscAmt);
+        // Simulate 1 year passing
+        vm.warp(block.timestamp + oneYear);
+        // Update/refresh price feed to end of year but maintain prices
+        MockV3Aggregator(linkFeed).updateAnswer(1474e6);
+        // Burn dsc
+        engine.burnDSC(link, dscAmt); // Burn all dsc
+        vm.stopPrank();
+
+        // Burn should succeed
+        (uint256 linkAfter, uint256 debtAfter) = engine.getVaultInformation(link, TEST_USER_1);
+        uint256 feesInLink = engine.getTokenAmountFromUsdValue2(link, calculatedFees);
+        uint256 linkEnd = dsc.balanceOf(TEST_USER_1);
+
+        assertEq(expectedFees, calculatedFees);
+        assertEq(debtAfter, 0);
+        assertEq(linkAfter, lockAmt - feesInLink);
+        assertEq(linkEnd, linkBefore - dscAmt);
+    }
 }
 
 contract Dummy {
