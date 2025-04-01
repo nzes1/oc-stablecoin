@@ -552,6 +552,95 @@ contract DSCProtocolUnitTest is Test {
         assertEq(linkAfter, lockAmt - feesInLink);
         assertEq(linkEnd, linkBefore - dscAmt);
     }
+
+    function test_UsersCanCloseVaultsByPayingDebtBackToTheProtocolAndRedeemingTheirCollateral() public {
+        bytes32 link = collIds[2];
+        uint256 linkAmt = 1000e18;
+        uint256 lockAmt = 900e18;
+        uint256 dscAmt = 500e18; // Requires ~ 800 link
+        uint256 nineMonths = 272 days; // ~273.75 days
+        address linkFeed = engine.getCollateralSettings(link).priceFeed;
+        address linkToken = engine.getCollateralAddress(link);
+
+        _depositCollateralAndMintDsc(link, TEST_USER_1, linkAmt, lockAmt, dscAmt);
+
+        // Balance of user's link before vault closure
+        uint256 startLinkBal = ERC20Like(linkToken).balanceOf(TEST_USER_1);
+        uint256 startTotalLinkDsc = engine.getTotalDscDebt(link);
+
+        vm.startPrank(TEST_USER_1);
+        // Approve engine to use dsc
+        dsc.approve(address(engine), dscAmt);
+        // Simulate nine months passing
+        vm.warp(block.timestamp + nineMonths);
+        // Update/refresh price feed to end of year but maintain prices
+        MockV3Aggregator(linkFeed).updateAnswer(1474e6);
+        // Burn all dsc and withdrawal all locked collateral
+        engine.redeemCollateralForDSC(link, lockAmt, dscAmt);
+        vm.stopPrank();
+
+        // Combined the raw fees in USD and the actual tokens into one call as two
+        // local variables were causing the infamous `stack too deep error`
+        // uint256 feesUsd = engine.calculateFees(dscAmt, nineMonths);
+        uint256 feesInLinkTokens = engine.getTokenAmountFromUsdValue2(link, (engine.calculateFees(dscAmt, nineMonths)));
+
+        (uint256 lockedBal, uint256 debt) = engine.getVaultInformation(link, TEST_USER_1);
+        uint256 endLinkBal = ERC20Like(linkToken).balanceOf(TEST_USER_1);
+        uint256 endTotalLinkDsc = engine.getTotalDscDebt(link);
+
+        assertEq(lockedBal, 0);
+        assertEq(debt, 0);
+        assertEq(endLinkBal, startLinkBal + lockAmt - feesInLinkTokens);
+        assertEq(endTotalLinkDsc, startTotalLinkDsc - dscAmt);
+    }
+
+    function test_UsersCanPartiallyShrinkVaultsAndWithdrawLockedCollateralIfHFRemainsSafe() public {
+        bytes32 link = collIds[2];
+        uint256 linkAmt = 1000e18;
+        uint256 lockAmt = 900e18;
+        uint256 dscAmt = 500e18; // Requires ~ 800 link
+
+        // Burning 200 DSC leaves 300 DSC in the vault, requiring a 160% OC.
+        // This means 480 LINK must remain locked.
+        //
+        // Fees are deducted when burning 200 DSC.
+        // A redeem request of 400 LINK succeeds, leaving 20 LINK to cover:
+        //  - Fees for this redemption.
+        //  - Future fees on the remaining 300 DSC.
+        //
+        // This test can be duplicated and extended to test future burns.
+        // A separate test should handle burning the remaining DSC.
+        // That test may require the `via-ir` flag due to `stack too deep` issues
+        // with the default compiler.
+        uint256 burnDsc = 200e18;
+        uint256 collToRedeem = 400e18;
+        uint256 nineMonths = 272 days; // ~273.75 days
+        address linkFeed = engine.getCollateralSettings(link).priceFeed;
+        address linkToken = engine.getCollateralAddress(link);
+
+        _depositCollateralAndMintDsc(link, TEST_USER_1, linkAmt, lockAmt, dscAmt);
+
+        uint256 startLinkBal = ERC20Like(linkToken).balanceOf(TEST_USER_1);
+
+        vm.startPrank(TEST_USER_1);
+        // Approve engine to use dsc
+        dsc.approve(address(engine), dscAmt);
+        // Simulate nine months passing
+        vm.warp(block.timestamp + nineMonths);
+        // Update/refresh price feed to end of year but maintain prices
+        MockV3Aggregator(linkFeed).updateAnswer(1474e6);
+        // Burn all dsc and withdrawal all locked collateral
+        engine.redeemCollateralForDSC(link, collToRedeem, burnDsc);
+        vm.stopPrank();
+
+        (uint256 lockedBal, uint256 debt) = engine.getVaultInformation(link, TEST_USER_1);
+        uint256 feesInLinkTokens = engine.getTokenAmountFromUsdValue2(link, (engine.calculateFees(burnDsc, nineMonths)));
+        uint256 endLinkBal = ERC20Like(linkToken).balanceOf(TEST_USER_1);
+
+        assertEq(endLinkBal, startLinkBal + collToRedeem);
+        assertEq(lockedBal, lockAmt - collToRedeem - feesInLinkTokens);
+        assertEq(debt, dscAmt - burnDsc);
+    }
 }
 
 contract Dummy {

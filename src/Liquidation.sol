@@ -177,11 +177,11 @@ contract Liquidations is Storage, VaultManager {
         return reward;
     }
 
-    function min(uint256 a, uint256 b) private pure returns (uint256) {
+    function min(uint256 a, uint256 b) internal pure returns (uint256) {
         return (a < b ? a : b);
     }
 
-    function max(uint256 a, uint256 b) private pure returns (uint256) {
+    function max(uint256 a, uint256 b) internal pure returns (uint256) {
         return (a > b ? a : b);
     }
 }

@@ -173,8 +173,16 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         // to avoid double check on hf, call directly the internal function.
         _burnDSC(collId, dscAmt, msg.sender, msg.sender);
 
+        // If all dsc on the vault was burned, then this is equivalence of vault closure.
+        // In such a case, the collateral to redeem will not be what the user specified but rather the
+        // available locked collateral since fees are collected from the locked amount
+        // Otherwise, user gets what they requested for.
+        uint256 lockedBal = s_vaults[collId][msg.sender].lockedCollateral;
+
+        uint256 actualRedeemAmt = min(lockedBal, collAmt);
+
         // Then move the collateral specified, but only if hf is not broken
-        redeemCollateral(collId, collAmt);
+        redeemCollateral(collId, actualRedeemAmt);
     }
 
     // to avoid circle inheritance, this function was moved from the VM contract to the engine here
