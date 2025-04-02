@@ -8,7 +8,10 @@ import {OraclesLibrary} from "./libraries/OraclesLibrary.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts@v1.3.0/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {IERC20 as ERC20Like} from "@openzeppelin/contracts@5.1.0/token/ERC20/IERC20.sol";
 
+import {console} from "forge-std/console.sol";
+
 contract VaultManager is Storage {
+
     using OraclesLibrary for AggregatorV3Interface;
 
     function boostVault(bytes32 collId, uint256 collAmt) external {
@@ -109,7 +112,10 @@ contract VaultManager is Storage {
         return rawUsdValue;
     }
 
-    function scaleUsdValueToDSCDecimals(bytes32 collId, uint256 rawUsdValue)
+    function scaleUsdValueToDSCDecimals(
+        bytes32 collId,
+        uint256 rawUsdValue
+    )
         internal
         returns (uint256 scaledUsdValue)
     {
@@ -161,4 +167,5 @@ contract VaultManager is Storage {
 
         return tokenAmount;
     }
+
 }

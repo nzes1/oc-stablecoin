@@ -20,6 +20,7 @@ import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 // 4 DAI
 
 contract DSCProtocolUnitTest is Test {
+
     // Core contracts
     DeployDSC deployer;
     HelperConfig helper;
@@ -110,7 +111,8 @@ contract DSCProtocolUnitTest is Test {
         assertGt(emits.length, 0); // 1 event
 
         assertEq(emits[0].topics.length, 3);
-        assertEq(emits[0].topics[0], keccak256("CM__CollateralDeposited(bytes32,address,uint256)")); // topic 0 is event signature
+        assertEq(emits[0].topics[0], keccak256("CM__CollateralDeposited(bytes32,address,uint256)")); // topic 0 is event
+            // signature
         assertEq(emits[0].topics[1], collIds[0]);
         assertEq(address(uint160(uint256(emits[0].topics[2]))), TEST_USER_1);
         assertEq(abi.decode(emits[0].data, (uint256)), depositAmt);
@@ -302,6 +304,54 @@ contract DSCProtocolUnitTest is Test {
         engine.depositEtherCollateralAndMintDSC{value: ethAmt}(dscAmt);
     }
 
+    function test_UsersCanOnlyIncreaseVaultDebtsWithDscAmountMoreThanOrEqualToMinimumSet() public {
+        bytes32 usdt = collIds[3];
+        uint256 dscAmt = 50e18; // less than Min allowed debt size
+        _mint(usdt, TEST_USER_2);
+
+        vm.expectPartialRevert(DSCEngine.DSCEngine__DebtSizeBelowMinimumAmountAllowed.selector);
+
+        // Minimum mint amount is 100 dsc
+        // Try to open a vault with all usdt deposited but mint dsc that is less than 100
+        vm.startPrank(TEST_USER_2);
+        engine.addToVault(usdt, DEPOSIT_AMOUNT, dscAmt);
+        vm.stopPrank();
+    }
+
+    function test_UsersCanIncreaseVaultDebtByAddingMoreCollateralAndRequestingMoreDsc() public {
+        bytes32 weth = collIds[1];
+        uint256 wethFirstDeposit = 60 ether;
+        // 60 ether allows ~ 71152 dsc. Leaving a 52 dsc buffer for fees
+        uint256 dscFirstMint = 71_100e18;
+        uint256 wethSecondDeposit = 30 ether;
+        // 30 ether allows ~ 35576 dsc
+        uint256 dscSecondMint = 35_000e18;
+        uint256 oneYear = 365 days;
+        uint256 nineMonths = 272 days;
+
+        _depositCollateralAndMintDsc(weth, TEST_USER_1, wethFirstDeposit, wethFirstDeposit, dscFirstMint);
+
+        // Fast forward, 9 months later
+        vm.warp(block.timestamp + nineMonths);
+        // Update priceFeed with same price so as not to be stale
+        MockV3Aggregator(engine.getCollateralSettings(weth).priceFeed).updateAnswer(201635e6);
+
+        uint256 nineMonthsFeesInWeth =
+            engine.getTokenAmountFromUsdValue2(weth, engine.calculateFees(dscFirstMint, nineMonths));
+
+        // First deposit some collateral.
+        _deposit(weth, TEST_USER_1, wethSecondDeposit);
+
+        vm.startPrank(TEST_USER_1);
+        engine.addToVault(weth, wethSecondDeposit, dscSecondMint);
+        vm.stopPrank();
+
+        (uint256 totalLocked, uint256 currentDebt) = engine.getVaultInformation(weth, TEST_USER_1);
+
+        assertEq(totalLocked, wethFirstDeposit + wethSecondDeposit - nineMonthsFeesInWeth);
+        assertEq(currentDebt, dscFirstMint + dscSecondMint);
+    }
+
     /*//////////////////////////////////////////////////////////////
                               WITHDRAWALS
     //////////////////////////////////////////////////////////////*/
@@ -311,7 +361,9 @@ contract DSCProtocolUnitTest is Test {
         uint256 collAmt,
         uint256 lockAmt,
         uint256 dscAmt
-    ) internal {
+    )
+        internal
+    {
         _deposit(collId, user, collAmt);
 
         vm.startPrank(user);
@@ -641,12 +693,15 @@ contract DSCProtocolUnitTest is Test {
         assertEq(lockedBal, lockAmt - collToRedeem - feesInLinkTokens);
         assertEq(debt, dscAmt - burnDsc);
     }
+
 }
 
 contract Dummy {
+
     uint8 num;
 
     constructor() {
         num = 10;
     }
+
 }

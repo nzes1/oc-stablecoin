@@ -15,5 +15,13 @@ depth = 10
 fail_on_revert = true
 dictionary_weight = 80
 
+# Formatter
+[fmt]
+multiline_func_header = "all"
+contract_new_lines = true
+line_length = 120
+#bracket_spacing = true
+wrap_comments = true
+
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

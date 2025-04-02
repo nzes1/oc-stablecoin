@@ -51,6 +51,7 @@ import {Liquidations} from "./Liquidation.sol";
 import {console} from "forge-std/console.sol";
 
 contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager, VaultManager, Liquidations {
+
     /*//////////////////////////////////////////////////////////////
                                  TYPES
     //////////////////////////////////////////////////////////////*/
@@ -154,7 +155,11 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
      * @param collAmt The amount of collateral tokens to deposit.
      * @param dscAmt The amount of DSC tokens to mint.
      */
-    function depositCollateralAndMintDSC(bytes32 collId, uint256 collAmt, uint256 dscAmt)
+    function depositCollateralAndMintDSC(
+        bytes32 collId,
+        uint256 collAmt,
+        uint256 dscAmt
+    )
         external
         isValidDebtSize(dscAmt)
     {
@@ -185,7 +190,7 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         redeemCollateral(collId, actualRedeemAmt);
     }
 
-    // to avoid circle inheritance, this function was moved from the VM contract to the engine here
+    // Prior to calling this function, user must deposit collateral using the other deposit functions.
     function addToVault(bytes32 collId, uint256 collAmt, uint256 dscAmt) external isValidDebtSize(dscAmt) {
         // to top -up debt, the accumulated fees has to be collected first.
         // then top-up the debt together with backing collateral
@@ -202,6 +207,7 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
 
         // this block is repeated...maybe
         //HF of vault has to remain healthy
+
         (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
 
         if (!healthy) {
@@ -226,7 +232,9 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         /// UI will have a flow such that a true here introduces the other 2
         uint256 dsc,
         bool withdraw
-    ) external {
+    )
+        external
+    {
         // check for underwater status and mark it
         bool liquidatable = vaultIsUnderwater(collId, owner);
 
@@ -449,7 +457,10 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         uint256 liqThreshold,
         address priceFeed,
         uint8 tknDecimals
-    ) public onlyOwner {
+    )
+        public
+        onlyOwner
+    {
         // Only configure supported collateral if not previously set
         if (s_collaterals[collId].tokenAddr != address(0)) {
             revert DSCEngine__CollateralConfigurationAlreadySet(collId);
@@ -493,7 +504,10 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         return s_collaterals[collId].tokenAddr;
     }
 
-    function getVaultInformation(bytes32 collId, address owner)
+    function getVaultInformation(
+        bytes32 collId,
+        address owner
+    )
         external
         view
         returns (uint256 collAmt, uint256 dscDebt)
@@ -519,4 +533,5 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
     function calculateFees(uint256 debt, uint256 debtPeriod) external pure returns (uint256) {
         return calculateProtocolFee(debt, debtPeriod);
     }
+
 }
