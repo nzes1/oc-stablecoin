@@ -304,7 +304,7 @@ contract DSCProtocolUnitTest is Test {
         engine.depositEtherCollateralAndMintDSC{value: ethAmt}(dscAmt);
     }
 
-    function test_UsersCanOnlyIncreaseVaultDebtsWithDscAmountMoreThanOrEqualToMinimumSet() public {
+    function test_UsersCanOnlyIncreaseVaultDebtWithDscAmountMoreThanOrEqualToMinimumSet() public {
         bytes32 usdt = collIds[3];
         uint256 dscAmt = 50e18; // less than Min allowed debt size
         _mint(usdt, TEST_USER_2);
@@ -314,11 +314,11 @@ contract DSCProtocolUnitTest is Test {
         // Minimum mint amount is 100 dsc
         // Try to open a vault with all usdt deposited but mint dsc that is less than 100
         vm.startPrank(TEST_USER_2);
-        engine.addToVault(usdt, DEPOSIT_AMOUNT, dscAmt);
+        engine.expandVault(usdt, DEPOSIT_AMOUNT, dscAmt);
         vm.stopPrank();
     }
 
-    function test_UsersCanIncreaseVaultDebtByAddingMoreCollateralAndRequestingMoreDsc() public {
+    function test_UsersCanExpandVaultsByAddingMoreCollateralAndRequestingMoreDsc() public {
         bytes32 weth = collIds[1];
         uint256 wethFirstDeposit = 60 ether;
         // 60 ether allows ~ 71152 dsc. Leaving a 52 dsc buffer for fees
@@ -326,7 +326,6 @@ contract DSCProtocolUnitTest is Test {
         uint256 wethSecondDeposit = 30 ether;
         // 30 ether allows ~ 35576 dsc
         uint256 dscSecondMint = 35_000e18;
-        uint256 oneYear = 365 days;
         uint256 nineMonths = 272 days;
 
         _depositCollateralAndMintDsc(weth, TEST_USER_1, wethFirstDeposit, wethFirstDeposit, dscFirstMint);
@@ -339,17 +338,88 @@ contract DSCProtocolUnitTest is Test {
         uint256 nineMonthsFeesInWeth =
             engine.getTokenAmountFromUsdValue2(weth, engine.calculateFees(dscFirstMint, nineMonths));
 
-        // First deposit some collateral.
-        _deposit(weth, TEST_USER_1, wethSecondDeposit);
-
         vm.startPrank(TEST_USER_1);
-        engine.addToVault(weth, wethSecondDeposit, dscSecondMint);
+        // First pre-approve engine before expanding the vault
+        ERC20Like(engine.getCollateralSettings(weth).tokenAddr).approve(address(engine), wethSecondDeposit);
+        // Then do the expansion
+        engine.expandVault(weth, wethSecondDeposit, dscSecondMint);
         vm.stopPrank();
 
         (uint256 totalLocked, uint256 currentDebt) = engine.getVaultInformation(weth, TEST_USER_1);
 
         assertEq(totalLocked, wethFirstDeposit + wethSecondDeposit - nineMonthsFeesInWeth);
         assertEq(currentDebt, dscFirstMint + dscSecondMint);
+    }
+
+    function test_UsersCanExpandVaultsBackedByETH() public {
+        bytes32 eth = collIds[0];
+        uint256 ethFirstDeposit = 12 ether;
+        // 12 ether allows ~ 14230 dsc with OC of 170%
+        uint256 dscFirstMint = 14_000e18;
+        uint256 ethSecondDeposit = 11 ether;
+        // 11 ether allows ~ 13044 dsc
+        uint256 dscSecondMint = 12_500e18;
+        uint256 sixMonths = 182 days;
+
+        vm.startPrank(TEST_USER_1);
+        engine.depositEtherCollateralAndMintDSC{value: ethFirstDeposit}(dscFirstMint);
+        vm.stopPrank();
+
+        (uint256 initialColl, uint256 initialDebt) = engine.getVaultInformation(eth, TEST_USER_1);
+
+        assertEq(initialColl, ethFirstDeposit);
+        assertEq(initialDebt, dscFirstMint);
+
+        // Fast forward and update price to avoid staleness
+        vm.warp(block.timestamp + sixMonths);
+
+        // ETH relies on WETH price, so we can update weth price feed
+        MockV3Aggregator(engine.getCollateralSettings(collIds[1]).priceFeed).updateAnswer(201635e6);
+
+        // Expand vault
+        vm.startPrank(TEST_USER_1);
+        engine.expandETHVault{value: ethSecondDeposit}(dscSecondMint);
+        vm.stopPrank();
+
+        uint256 sixMonthsFeesInEth =
+            engine.getTokenAmountFromUsdValue2(eth, engine.calculateFees(dscFirstMint, sixMonths));
+
+        (uint256 finalColl, uint256 finalDebt) = engine.getVaultInformation(eth, TEST_USER_1);
+
+        assertEq(finalColl, initialColl + ethSecondDeposit - sixMonthsFeesInEth);
+        assertEq(finalDebt, dscFirstMint + dscSecondMint);
+    }
+
+    function test_ExpandingVaultRevertsIfHFFallBelowThreshold() public {
+        bytes32 weth = collIds[1];
+        uint256 wethFirstDeposit = 12 ether;
+        // 12 ether allows ~ 14230 dsc with OC of 170%
+        uint256 dscFirstMint = 14_000e18;
+        uint256 wethSecondDeposit = 11 ether;
+        // 11 ether allows ~ 13044 dsc
+        uint256 dscSecondMint = 13_300e18;
+        uint256 sixMonths = 182 days;
+
+        _depositCollateralAndMintDsc(weth, TEST_USER_2, wethFirstDeposit, wethFirstDeposit, dscFirstMint);
+
+        (uint256 initialColl, uint256 initialDebt) = engine.getVaultInformation(weth, TEST_USER_2);
+
+        assertEq(initialColl, wethFirstDeposit);
+        assertEq(initialDebt, dscFirstMint);
+
+        // Fast forward and update price to avoid staleness
+        vm.warp(block.timestamp + sixMonths);
+
+        // ETH relies on WETH price, so we can update weth price feed
+        MockV3Aggregator(engine.getCollateralSettings(collIds[1]).priceFeed).updateAnswer(201635e6);
+
+        // Expanding vault reverts because the health factor is broken since dsc being added is more
+        // than the supplied collateral
+        vm.startPrank(TEST_USER_1);
+        ERC20Like(engine.getCollateralAddress(weth)).approve(address(engine), dscSecondMint);
+        vm.expectPartialRevert(DSCEngine.DSCEngine__HealthFactorBelowThreshold.selector);
+        engine.expandVault(weth, wethSecondDeposit, dscSecondMint);
+        vm.stopPrank();
     }
 
     /*//////////////////////////////////////////////////////////////

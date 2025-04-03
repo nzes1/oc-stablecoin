@@ -190,8 +190,18 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         redeemCollateral(collId, actualRedeemAmt);
     }
 
-    // Prior to calling this function, user must deposit collateral using the other deposit functions.
-    function addToVault(bytes32 collId, uint256 collAmt, uint256 dscAmt) external isValidDebtSize(dscAmt) {
+    function expandVault(bytes32 collId, uint256 collAmt, uint256 dscAmt) external isValidDebtSize(dscAmt) {
+        // deposit the collateral before topping up the vault
+        depositCollateral(collId, collAmt);
+        addToVault(collId, collAmt, dscAmt);
+    }
+
+    function expandETHVault(uint256 dscAmt) external payable isValidDebtSize(dscAmt) {
+        addEtherCollateral();
+        addToVault("ETH", msg.value, dscAmt);
+    }
+
+    function addToVault(bytes32 collId, uint256 collAmt, uint256 dscAmt) internal {
         // to top -up debt, the accumulated fees has to be collected first.
         // then top-up the debt together with backing collateral
 
@@ -205,7 +215,6 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         s_vaults[collId][msg.sender].dscDebt += dscAmt;
         s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
 
-        // this block is repeated...maybe
         //HF of vault has to remain healthy
 
         (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
