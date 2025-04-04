@@ -91,6 +91,7 @@ contract VaultManager is Storage {
 
         scaledUpUsdValue = scaleUsdValueToDSCDecimals(collId, rawUsdValue);
 
+        // The usd value is in 18 decimals
         return scaledUpUsdValue;
     }
 

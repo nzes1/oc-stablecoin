@@ -376,6 +376,8 @@ contract DSCProtocolUnitTest is Test {
         // ETH relies on WETH price, so we can update weth price feed
         MockV3Aggregator(engine.getCollateralSettings(collIds[1]).priceFeed).updateAnswer(201635e6);
 
+        vm.expectEmit(true, true, true, false, address(engine));
+        emit DSCEngine.DscMinted(TEST_USER_1, dscSecondMint);
         // Expand vault
         vm.startPrank(TEST_USER_1);
         engine.expandETHVault{value: ethSecondDeposit}(dscSecondMint);
@@ -762,6 +764,74 @@ contract DSCProtocolUnitTest is Test {
         assertEq(endLinkBal, startLinkBal + collToRedeem);
         assertEq(lockedBal, lockAmt - collToRedeem - feesInLinkTokens);
         assertEq(debt, dscAmt - burnDsc);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        PRICE FEED CALCULATIONS
+    //////////////////////////////////////////////////////////////*/
+    function test_VaultHealthFactorFIsCalculatedCorrectly() public {
+        // HF (Health Factor) = Ratio of trusted collateral to minted DSC.
+        //
+        // Trusted collateral is the portion of collateral (in USD value)
+        // that is considered safe based on the liquidation threshold (LT).
+        //
+        // Example (for an Overcollateralization (OC) of 150%):
+        // - Liquidation Threshold (LT) = (100 * 100) / 150 = 66.67%
+        // - Trusted Collateral = (66.67 / 100) * Total Collateral USD Value
+        //
+        // The first 100 is for precision, meaning real calculations use **1e18**.
+        // Since LT is stored with 18 decimals, **66.67% = 666666666666666666 (1e18 format)**.
+        bytes32 link = collIds[2];
+        uint256 linkAmt = 60_000e18;
+        uint256 lockAmt = 57_750e18;
+        // 57750 link can mint ~ 532,021.875 dsc
+        uint256 dscAmt = 520_000e18;
+        uint256 calculatedHF;
+        uint256 actualHF;
+
+        _depositCollateralAndMintDsc(link, TEST_USER_2, linkAmt, lockAmt, dscAmt);
+
+        // LINK has an OC of 160%
+        uint256 LT = (1e18 * 100) / 160;
+        // Since LT is a % of 18 decimals, we divide by 1e18. Its like saying 10%
+        // and in a calculation you write it as 10/100 where 100 is the decimals
+        uint256 trustedCollateral = (LT * lockAmt) / 1e18;
+
+        // The usd value here has decimals equal to those of price feed
+        // link feed has 8 decimals and thus the result loses some value in this case
+        // We scale it to 18 decimals since dsc has 18 decimals
+        uint256 trustedCollUsd = (engine.getRawUsdValue(link, trustedCollateral)) * 10 ** 10;
+
+        // Both trustedColl and dscAmt now have 18 decimals. Dividing them removes the 18 decimals
+        // so maintain the 18 decimals, we multiply by 18decimals
+        calculatedHF = (trustedCollUsd * 1e18) / dscAmt;
+        (, actualHF) = engine.getHealthFactor(link, TEST_USER_2);
+
+        assertEq(calculatedHF, actualHF);
+    }
+
+    function test_VaultUSDValueIsCalculatedCorrectly() public {
+        bytes32 weth = collIds[1];
+        uint256 wethAmt = 1270 ether;
+        uint256 lockAmt = 1255 ether;
+        uint256 dscAmt = 1_000_000e18;
+        uint256 calculatedUsdValue;
+        uint256 actualUsdValue;
+        uint256 wethUsdPrice = 201635e6; // 8 decimals => $2016.35
+
+        _depositCollateralAndMintDsc(weth, TEST_USER_2, wethAmt, lockAmt, dscAmt);
+
+        // 1 weth = wethUsdPrice
+        // some weth = ?
+        // (some weth * wethUsdPrice)/ 1 weth
+        // And 1 weth = 1e18
+
+        uint256 usdValue = (lockAmt * wethUsdPrice) / 1e18; // Results to a value with 8 decimals.
+        calculatedUsdValue = usdValue * 10 ** 10;
+
+        actualUsdValue = engine.getVaultCollateralUsdValue(weth, TEST_USER_2);
+
+        assertEq(calculatedUsdValue, actualUsdValue);
     }
 
 }
