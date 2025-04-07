@@ -41,6 +41,7 @@ contract DSCProtocolUnitTest is Test {
     uint256 constant DEPOSIT_AMOUNT = 1_000e18;
 
     event CM__CollateralDeposited(bytes32 indexed collId, address indexed depositor, uint256 amount);
+    event VaultMarkedAsUnderwater(bytes32 indexed collId, address indexed owner);
 
     function setUp() public {
         deployer = new DeployDSC();
@@ -832,6 +833,69 @@ contract DSCProtocolUnitTest is Test {
         actualUsdValue = engine.getVaultCollateralUsdValue(weth, TEST_USER_2);
 
         assertEq(calculatedUsdValue, actualUsdValue);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              LIQUIDATIONS
+    //////////////////////////////////////////////////////////////*/
+    function _mockPriceChange(bytes32 collId, int256 newPrice) internal {
+        address priceFeed = engine.getCollateralSettings(collId).priceFeed;
+        MockV3Aggregator(priceFeed).updateAnswer(newPrice);
+    }
+
+    function test_RevertWhenMarkingHealthyVaultAsUnderwater() public {
+        bytes32 link = collIds[2];
+        uint256 linkAmt = 1000e18;
+        // 1000 link allows minting ~ 9212 dsc
+        uint256 dscAmt = 8000e18;
+        // liquidator
+        uint256 liquidatorDsc = 50_000e18;
+        uint256 usdtAmt = 60_000e18;
+
+        // User 2 opens a vault
+        _depositCollateralAndMintDsc(link, TEST_USER_2, linkAmt, linkAmt, dscAmt);
+
+        // mint liquidator(user 1) dsc backed by usdt
+        _depositCollateralAndMintDsc(collIds[3], TEST_USER_1, usdtAmt, usdtAmt, liquidatorDsc);
+
+        // The vault is currently healthy.
+        vm.expectRevert(DSCEngine.DSCEngine__VaultNotUnderwater.selector);
+        vm.startPrank(TEST_USER_1);
+        // Only marking and not liquidating.
+        engine.markVaultAsUnderwater(link, TEST_USER_2, false, 0, false);
+        vm.stopPrank();
+    }
+
+    function test_VaultCanBeMarkedAsUnderwaterWhenHFIsBelowMinimumHF() public {
+        // vault owner - ETH
+        uint256 ethAmt = 20 ether; // mints ~ 23721 dsc
+        uint256 dscAmt = 23_000e18;
+
+        // Liquidator
+        uint256 liquidatorUsdtAmt = 60_000e18;
+        uint256 liquidatorDscAmt = 50_000e18;
+
+        // User 1 opens vault
+        vm.startPrank(TEST_USER_1);
+        engine.depositEtherCollateralAndMintDSC{value: ethAmt}(dscAmt);
+        vm.stopPrank();
+
+        // Obtain dsc for liquidator
+        _depositCollateralAndMintDsc(collIds[3], TEST_USER_2, liquidatorUsdtAmt, liquidatorUsdtAmt, liquidatorDscAmt);
+
+        // 24 hours later, ETH price drops down to $1800.02
+        vm.warp(block.timestamp + 1 days);
+        // eth uses weth price feed
+        _mockPriceChange(collIds[1], 180002e6);
+
+        // Now user 1's vault is undercollateralized and can be marked as underwater
+        // Successful marking emits
+        vm.expectEmit(true, true, false, false, address(engine));
+        emit VaultMarkedAsUnderwater(collIds[0], TEST_USER_1);
+
+        vm.startPrank(TEST_USER_2);
+        engine.markVaultAsUnderwater(collIds[0], TEST_USER_1, false, 0, false);
+        vm.stopPrank();
     }
 
 }

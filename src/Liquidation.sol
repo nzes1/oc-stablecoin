@@ -6,6 +6,9 @@ import {Storage} from "./Storage.sol";
 import {VaultManager} from "./VaultManager.sol";
 
 contract Liquidations is Storage, VaultManager {
+
+    event VaultMarkedAsUnderwater(bytes32 indexed collId, address indexed owner);
+
     error LM__VaultNotLiquidatable();
     error LM__SuppliedDscNotEnoughToRepayBadDebt();
 
@@ -19,6 +22,7 @@ contract Liquidations is Storage, VaultManager {
             // Only when zero, set it
             if (firstUnderwaterTime[collId][owner] == 0) {
                 firstUnderwaterTime[collId][owner] = block.timestamp;
+                emit VaultMarkedAsUnderwater(collId, owner);
             }
             //emit
         }
@@ -110,7 +114,10 @@ contract Liquidations is Storage, VaultManager {
         discount = (rate * dsc) / PRECISION;
     }
 
-    function calculateRewardBasedOnDebtSize(bytes32 collId, uint256 dscDebtSize)
+    function calculateRewardBasedOnDebtSize(
+        bytes32 collId,
+        uint256 dscDebtSize
+    )
         internal
         view
         returns (uint256 reward)
@@ -184,4 +191,5 @@ contract Liquidations is Storage, VaultManager {
     function max(uint256 a, uint256 b) internal pure returns (uint256) {
         return (a > b ? a : b);
     }
+
 }

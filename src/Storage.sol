@@ -5,6 +5,7 @@ pragma solidity 0.8.24;
 import {Structs} from "./Structs.sol";
 
 contract Storage {
+
     // DSC decimals
     uint8 internal constant DSC_DECIMALS = 18;
     uint256 internal constant PRECISION = 1e18;
@@ -41,7 +42,7 @@ contract Storage {
     mapping(bytes32 collId => Structs.OraclesDecimals) s_oracleDecimals;
 
     // underwater positions start time
-    mapping(bytes32 collId => mapping(address owner => uint256 timestamp)) internal firstUnderwaterTime;
+    mapping(bytes32 collId => mapping(address owner => uint256 timestamp)) public firstUnderwaterTime;
 
     // Fees collected per collateral type
     mapping(bytes32 collId => uint256) internal s_totalCollectedFeesPerCollateral;
@@ -49,4 +50,5 @@ contract Storage {
     mapping(bytes32 collId => uint256) internal s_totalLiquidationPenaltyPerCollateral;
 
     mapping(bytes32 collId => mapping(address owner => Structs.Vault)) internal s_absorbedBadVaults;
+
 }

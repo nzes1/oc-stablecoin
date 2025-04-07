@@ -85,9 +85,8 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
 
     error DSCEngine__MintingDSCFailed();
     error DSCEngine__BurningDSCFailed();
-
     error DSCEngine__HealthFactorBelowThreshold(uint256 healthFactor);
-
+    error DSCEngine__VaultNotUnderwater();
     error DSCEngine__ZeroAmountNotAllowed();
     error DSCEngine__CollateralConfigurationAlreadySet(bytes32 collId);
     error DSCEngine__CollateralConfigurationCannotBeRemovedWithOutstandingDebt(uint256 debt);
@@ -252,6 +251,10 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
             if (liquidate) {
                 liquidateVault(collId, owner, dsc, withdraw);
             }
+        }
+        // Otherwise vault is not liquidatable
+        else {
+            revert DSCEngine__VaultNotUnderwater();
         }
     }
 
