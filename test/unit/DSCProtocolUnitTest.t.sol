@@ -43,6 +43,9 @@ contract DSCProtocolUnitTest is Test {
     event CM__CollateralDeposited(bytes32 indexed collId, address indexed depositor, uint256 amount);
     event VaultMarkedAsUnderwater(bytes32 indexed collId, address indexed owner);
 
+    error LM__SuppliedDscNotEnoughToRepayBadDebt();
+    error LM__VaultNotLiquidatable();
+
     function setUp() public {
         deployer = new DeployDSC();
         (dsc, engine, helper) = deployer.run();
@@ -866,6 +869,30 @@ contract DSCProtocolUnitTest is Test {
         vm.stopPrank();
     }
 
+    function test_RevertWhenLiquidatorAttemptsLiquidationOfHealthyVault() public {
+        bytes32 link = collIds[2];
+        uint256 linkAmt = 1000e18;
+        // 1000 link allows minting ~ 9212 dsc
+        uint256 dscAmt = 8000e18;
+
+        // liquidator opens a usdt vault to acquire dsc
+        uint256 liquidatorDsc = 50_000e18;
+        uint256 usdtAmt = 60_000e18;
+
+        // User 2 opens a vault
+        _depositCollateralAndMintDsc(link, TEST_USER_2, linkAmt, linkAmt, dscAmt);
+
+        // mint liquidator(user 1) dsc backed by usdt
+        _depositCollateralAndMintDsc(collIds[3], TEST_USER_1, usdtAmt, usdtAmt, liquidatorDsc);
+
+        // The vault is currently healthy.
+        vm.expectRevert(LM__VaultNotLiquidatable.selector);
+        vm.startPrank(TEST_USER_1);
+        // Attempting a liquidation
+        engine.liquidateVault(link, TEST_USER_2, 10e18, false);
+        vm.stopPrank();
+    }
+
     function test_VaultCanBeMarkedAsUnderwaterWhenHFIsBelowMinimumHF() public {
         // vault owner - ETH
         uint256 ethAmt = 20 ether; // mints ~ 23721 dsc
@@ -895,6 +922,34 @@ contract DSCProtocolUnitTest is Test {
 
         vm.startPrank(TEST_USER_2);
         engine.markVaultAsUnderwater(collIds[0], TEST_USER_1, false, 0, false);
+        vm.stopPrank();
+    }
+
+    function test_RevertWhenLiquidatorAttemptsPartialVaultLiquidation() public {
+        // weth vault
+        bytes32 weth = collIds[1];
+        uint256 wethAmt = 50 ether; // mints ~ 59304 dsc
+        uint256 dscAmt = 59_000e18;
+
+        // Liquidator opens a usdt vault to acquire dsc for liquidation
+        address liquidator = makeAddr("Liquidator User");
+        uint256 liquidatorUsdtAmt = 120_000e18;
+        uint256 liquidatorDscAmt = 100_0000e18;
+
+        // Acquire liquidator's dsc
+        _depositCollateralAndMintDsc(collIds[3], liquidator, liquidatorUsdtAmt, liquidatorUsdtAmt, liquidatorDscAmt);
+
+        // Open weth vault for user 1 that will be liquidated
+        _depositCollateralAndMintDsc(weth, TEST_USER_1, wethAmt, wethAmt, dscAmt);
+
+        // 7 days later, price of weth drops to $2000 rendering the position of user 1 liquidatable
+        vm.warp(block.timestamp + 7 days);
+        _mockPriceChange(weth, 2000e8);
+
+        // Liquidator attempts to partially liquidate the position of 59k dsc with only 50k dsc
+        vm.expectRevert(LM__SuppliedDscNotEnoughToRepayBadDebt.selector);
+        vm.startPrank(liquidator);
+        engine.markVaultAsUnderwater(weth, TEST_USER_1, true, 50_000e18, false);
         vm.stopPrank();
     }
 

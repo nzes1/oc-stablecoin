@@ -42,7 +42,7 @@ contract Storage {
     mapping(bytes32 collId => Structs.OraclesDecimals) s_oracleDecimals;
 
     // underwater positions start time
-    mapping(bytes32 collId => mapping(address owner => uint256 timestamp)) public firstUnderwaterTime;
+    mapping(bytes32 collId => mapping(address owner => uint256 timestamp)) internal firstUnderwaterTime;
 
     // Fees collected per collateral type
     mapping(bytes32 collId => uint256) internal s_totalCollectedFeesPerCollateral;

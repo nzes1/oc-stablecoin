@@ -37,9 +37,6 @@ contract Liquidations is Storage, VaultManager {
         return !vaultIsHealthy;
     }
 
-    // start auction if underwater
-
-    // penalty of 10%, 3% goes to protocol 7% to liquidator
     // only take debt value + penalty + any fees then return excess to owner
     // decreasing discount on collateral - this way liquidators are incentivized to act quickly.
     // To avoid liquidators not willing to liquidate small loans - perhaps due to high
@@ -91,7 +88,7 @@ contract Liquidations is Storage, VaultManager {
 
         uint256 rewardBasedOnDebtSize = calculateRewardBasedOnDebtSize(collId, dscDebt);
 
-        // total rewards in USD/dsc amount -- needs to be converted to coll amount and transfered.
+        // total rewards in USD/dsc amount -- needs to be converted to coll amount and transferred.
         totalRewards = discount + rewardBasedOnDebtSize;
 
         return totalRewards;
@@ -106,7 +103,7 @@ contract Liquidations is Storage, VaultManager {
         //                         ??  = WHAT ABOUT SAY TOTAL DISCOUNT OF 3%
         // Then this applies to other rates resulting to the formula
         // discount = (rate * dsc debt amount) / 100%
-        // But rate is using a precision of 18 decimals. So the 100% needs to be scaled to same precison
+        // But rate is using a precision of 18 decimals. So the 100% needs to be scaled to same precision
         /// so scale up the divisor
         // remember a rate of 3% is rep as 3e16, then 100% will be rep as 1e18 and not 100e18
         // (rate * dsc debt amount) / (1e18)
@@ -124,7 +121,7 @@ contract Liquidations is Storage, VaultManager {
     {
         uint256 ocr = getOCR(collId);
 
-        // Reward for colletarals of < 150% OC = 1.5e18 or 15e17
+        // Reward for collaterals of < 150% OC = 1.5e18 or 15e17
         if (ocr < 15e17) {
             return calculateRewardForLowRiskCollateral(dscDebtSize);
         }
@@ -148,7 +145,7 @@ contract Liquidations is Storage, VaultManager {
         // Other calculate current % in a linear interpolation formula
         // current discount = discountAtStart - ((currentTime/TotalDecayTime) * discountAtStart - discountEnd)
         // But since multiplication should be done before division: and current time is the elapsed
-        // Discount start - ((elapsed * (discountStart - disocuntEnd)) / dotaldecaytime)
+        // Discount start - ((elapsed * (discountStart - discountEnd)) / totaldecaytime)
 
         uint256 discountDecayed = (elapsed * (LIQ_DISCOUNT_START - LIQ_DISCOUNT_END)) / LIQ_DISCOUNT_DECAY_TIME;
 
