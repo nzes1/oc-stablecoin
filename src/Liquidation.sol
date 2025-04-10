@@ -4,6 +4,7 @@ pragma solidity 0.8.24;
 
 import {Storage} from "./Storage.sol";
 import {VaultManager} from "./VaultManager.sol";
+import {console} from "forge-std/console.sol";
 
 contract Liquidations is Storage, VaultManager {
 
@@ -33,7 +34,6 @@ contract Liquidations is Storage, VaultManager {
         // which can be simplified to
         // return vaultIsHealthy ? false : true;
         // and since the status of underwater is the negation of health status, simply return
-
         return !vaultIsHealthy;
     }
 
@@ -142,7 +142,7 @@ contract Liquidations is Storage, VaultManager {
         // after 1 hour, return min discount %
         if (elapsed > LIQ_DISCOUNT_DECAY_TIME) return LIQ_DISCOUNT_END;
 
-        // Other calculate current % in a linear interpolation formula
+        // Otherwise calculate current % in a linear interpolation formula
         // current discount = discountAtStart - ((currentTime/TotalDecayTime) * discountAtStart - discountEnd)
         // But since multiplication should be done before division: and current time is the elapsed
         // Discount start - ((elapsed * (discountStart - discountEnd)) / totaldecaytime)

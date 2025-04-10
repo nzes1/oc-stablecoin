@@ -37,11 +37,14 @@ contract DSCProtocolUnitTest is Test {
     address TEST_USER_1 = makeAddr("Test-User-1");
     address TEST_USER_2 = makeAddr("Test-User-1");
     uint256 constant STARTING_ETH_BAL = 10_000 ether;
-    uint256 constant MINT_AMOUNT = 1000_000e18; // 1M tokens
+    uint256 constant MINT_AMOUNT = 100_000_000e18; // 100M tokens
     uint256 constant DEPOSIT_AMOUNT = 1_000e18;
 
     event CM__CollateralDeposited(bytes32 indexed collId, address indexed depositor, uint256 amount);
     event VaultMarkedAsUnderwater(bytes32 indexed collId, address indexed owner);
+    event LiquidationWithFullRewards(bytes32 indexed collId, address indexed owner, address liquidator);
+    event LiquidationWithPartialRewards(bytes32 indexed collId, address indexed owner, address liquidator);
+    event AbsorbedBadDebt(bytes32 indexed collId, address indexed owner);
 
     error LM__SuppliedDscNotEnoughToRepayBadDebt();
     error LM__VaultNotLiquidatable();
@@ -951,6 +954,512 @@ contract DSCProtocolUnitTest is Test {
         vm.startPrank(liquidator);
         engine.markVaultAsUnderwater(weth, TEST_USER_1, true, 50_000e18, false);
         vm.stopPrank();
+    }
+
+    function _computeRewards(bytes32 collId, address owner, uint256 timeMarked) internal returns (uint256) {
+        (, uint256 dscDebt) = engine.getVaultInformation(collId, owner);
+        // discount based on speed of liquidation
+        uint256 discountUsd = _timeDecayedDiscount(timeMarked, dscDebt);
+
+        // additional reward based on debt size that depends on collateral's risk
+        // eth, weth and link have an additional reward of 1.5% while usdt and dai has 0.5%
+        // This additional reward is however bound between a minimum amount and a max reward
+        uint256 rewardBasedOnSizeUsd = _rewardPerSize(collId, dscDebt);
+
+        uint256 totalUsdRewards = discountUsd + rewardBasedOnSizeUsd;
+
+        // rewards expressed in the backing vault collateral
+        uint256 tokenRewards = engine.getTokenAmountFromUsdValue2(collId, totalUsdRewards);
+
+        return tokenRewards;
+    }
+
+    function _timeDecayedDiscount(uint256 timeMarked, uint256 dscAmt) internal view returns (uint256) {
+        uint256 startRate = 3e16; // 3%
+        uint256 endRate = 18e15; // 1.8%
+        uint256 rateDecayTime = 1 hours;
+        uint256 currentRate;
+        uint256 discount;
+        uint256 timeElapsed = block.timestamp - timeMarked;
+
+        if (timeElapsed == 0) {
+            currentRate = startRate;
+        } else if (timeElapsed > rateDecayTime) {
+            currentRate = endRate;
+        } else {
+            currentRate = startRate - ((timeElapsed * (startRate - endRate)) / rateDecayTime);
+        }
+        // console.log("here12");
+        // The below expression overflows, breaking down into chunks using temp variables.
+        // currentRate = startRate - ((timeElapsed * (startRate - endRate)) / rateDecayTime);
+        // uint256 temp1 = timeElapsed * (startRate - endRate);
+        // uint256 temp2 = temp1 / rateDecayTime;
+        // console.log("here13");
+        // currentRate = startRate - temp2;
+        // console.log("here14");
+        discount = (currentRate * dscAmt) / 1e18;
+
+        return discount;
+    }
+
+    function _rewardPerSize(bytes32 collId, uint256 dscAmt) internal view returns (uint256) {
+        uint256 highRisk = 15e15; // 1.5% rate
+        uint256 lowRisk = 5e15; // 0.5% rate
+        uint256 rate;
+        uint256 calculatedReward;
+        uint256 minReward = 10e18; // 10 dsc
+        uint256 maxReward = 5_000e18; // 5000 dsc
+
+        if (collId == collIds[0] || collId == collIds[1] || collId == collIds[2]) {
+            rate = highRisk;
+        } else if (collId == collIds[3] || collId == collIds[4]) {
+            rate = lowRisk;
+        }
+
+        calculatedReward = (rate * dscAmt) / 1e18; // scale down the multiplication
+        // Should calculated reward be less than 10 dsc, take 10 dsc, otherwise take the calculated one
+        // Also, only take the minimum of the above and 5000 dsc.
+        return (_min(_max(calculatedReward, minReward), maxReward));
+    }
+
+    function _min(uint256 a, uint256 b) internal pure returns (uint256) {
+        return (a < b ? a : b);
+    }
+
+    function _max(uint256 a, uint256 b) internal pure returns (uint256) {
+        return (a > b ? a : b);
+    }
+
+    function _preApprove(address owner, uint256 amount) internal {
+        vm.startPrank(owner);
+        ERC20Like(address(dsc)).approve(address(engine), amount);
+        vm.stopPrank();
+    }
+
+    function test_LiquidatingWETHVaultCalculatesRewardsForLiquidatorProperly() public {
+        // weth vault
+        bytes32 weth = collIds[1];
+        uint256 wethAmt = 50 ether; // mints ~ 59304 dsc
+        uint256 dscAmt = 59_000e18;
+
+        // Liquidator opens a usdt vault to acquire dsc for liquidation
+        address liquidator = makeAddr("Liquidator User");
+        address keeper = makeAddr("A different user who marks positions as unhealthy without liquidating them");
+        uint256 liquidatorUsdtAmt = 120_000e6;
+        uint256 liquidatorDscAmt = 100_000e18;
+
+        uint256 underwaterTime;
+
+        // Acquire liquidator's dsc
+        _depositCollateralAndMintDsc(collIds[3], liquidator, liquidatorUsdtAmt, liquidatorUsdtAmt, liquidatorDscAmt);
+
+        // Open weth vault for user 1 that will be liquidated
+        _depositCollateralAndMintDsc(weth, TEST_USER_1, wethAmt, wethAmt, dscAmt);
+
+        // 7 days later, price of weth drops to $2000 rendering the position of user 1 liquidatable
+        vm.warp(block.timestamp + 7 days);
+        _mockPriceChange(weth, 2000e8);
+
+        uint256 liquidationAmt = 59_000e18;
+
+        // Mark the vault as underwater, so it can be liquidated later.
+        // In tests, separating the mark and liquidate steps makes it easier
+        // to compare expected vs actual rewards, rather than doing both
+        // in a single call to `markVaultAUnderwater()`with the liquidate
+        // parameter being true.
+        vm.startPrank(keeper);
+        // Only add the vault to the list of unhealthy vaults but not liquidate.
+        engine.markVaultAsUnderwater(weth, TEST_USER_1, false, 0, false);
+        underwaterTime = block.timestamp;
+        vm.stopPrank();
+
+        // First approve engine to consume dsc
+        _preApprove(liquidator, liquidationAmt);
+
+        // Arrange - check the expected & actual rewards before vault is liquidated
+        uint256 calculatedRewards = _computeRewards(weth, TEST_USER_1, underwaterTime);
+        uint256 actualRewardsUsd = engine.calculateLiquidationRewards(weth, TEST_USER_1);
+        uint256 actualRewards = engine.getTokenAmountFromUsdValue2(weth, actualRewardsUsd);
+
+        vm.startPrank(liquidator);
+        engine.markVaultAsUnderwater(weth, TEST_USER_1, true, liquidationAmt, false);
+        vm.stopPrank();
+
+        // Liquidator did not withdraw the liquidation outputs from protocol
+        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue2(weth, liquidationAmt));
+
+        assertEq(calculatedRewards, actualRewards);
+        assertEq(engine.getUserCollateralBalance(weth, liquidator), liquidatorWethBal);
+    }
+
+    function test_LiquidatingLINKVaultCalculatesRewardsForLiquidatorProperly() public {
+        // link vault
+        bytes32 link = collIds[2];
+        uint256 linkAmt = 1_000_000e18; // mints exactly 9_212_500 dsc
+        uint256 dscAmt = 9_050_000e18;
+
+        // Liquidator opens a usdt vault to acquire dsc for liquidation
+        address liquidator = makeAddr("Liquidator User");
+        address keeper = makeAddr("A different user who marks positions as unhealthy without liquidating them");
+        uint256 liquidatorUsdtAmt = 12_000_000e6; // 12m usdt
+        uint256 liquidatorDscAmt = 10_000_000e18; // 10m dsc
+
+        uint256 underwaterTime;
+
+        // Acquire liquidator's dsc
+        _depositCollateralAndMintDsc(collIds[3], liquidator, liquidatorUsdtAmt, liquidatorUsdtAmt, liquidatorDscAmt);
+
+        // Open link vault for user 1 that will be liquidated
+        _depositCollateralAndMintDsc(link, TEST_USER_1, linkAmt, linkAmt, dscAmt);
+
+        // 2 days later, price of link drops to $14.02 from $14.74 rendering the position of user 1 liquidatable
+        vm.warp(block.timestamp + 2 days);
+        _mockPriceChange(link, 1402e6);
+
+        uint256 liquidationAmt = 9_050_000e18;
+
+        // Mark the vault as underwater, so it can be liquidated later.
+        // In tests, separating the mark and liquidate steps makes it easier
+        // to compare expected vs actual rewards, rather than doing both
+        // in a single call to `markVaultAUnderwater()` with the liquidate
+        // parameter being true.
+        vm.startPrank(keeper);
+        // Only add the vault to the list of unhealthy vaults but not liquidate.
+        engine.markVaultAsUnderwater(link, TEST_USER_1, false, 0, false);
+        underwaterTime = block.timestamp;
+        vm.stopPrank();
+
+        // Simulate a 30-minute delay since the keeper marked the position.
+        // As a result, the liquidator no longer qualifies for the 3% speedy execution discount.
+        // Liquidator will get a rate between 3% and 1.8%
+        vm.warp(block.timestamp + 30 minutes);
+
+        // First approve engine to consume dsc
+        _preApprove(liquidator, liquidationAmt);
+
+        // Arrange - check the expected & actual rewards before vault is liquidated
+        // Notice that 30 minutes have elapsed so far
+        uint256 calculatedRewards = _computeRewards(link, TEST_USER_1, underwaterTime);
+        uint256 actualRewardsUsd = engine.calculateLiquidationRewards(link, TEST_USER_1);
+        uint256 actualRewards = engine.getTokenAmountFromUsdValue2(link, actualRewardsUsd);
+
+        // Liquidator tries to mark and liquidate in a single call.
+        // Since the keeper had already marked the vault as underwater earlier,
+        // the discount is calculated from that original marking time — not the liquidation call.
+        //
+        // Liquidation math breakdown:
+        // - Loan to cover: 9_050_000 dsc
+        // - Base LINK collateral to receive = 9_050_000 / 14.02 = ~645_506.419401 LINK
+        //
+        // Discounts (Higher discounts for speedy liquidations of underwater positions):
+        // Liquidation took place 30 minutes since vault became underwater, meaning a 2.4% as discount rate
+        // Additional reward based on debt size; this is a high risk collateral vault hence a rate of 1.5%
+        // But since this exceeds the upper limit of the reward based on size of 5_000 dsc, then the liquidator
+        // will only get a max of 5_000 dsc instead of 135_750 dsc
+        // - Time-based discount (30 minutes passed): 2.4% of 9_050_000 = 217_200 dsc
+        // - Size-based reward (1.5% of 9_050_000 = 135_750 dsc), capped at 5_000 dsc
+        //
+        // Total reward in dsc: 217_200 + 5_000 = 222_200 dsc
+        // Converted to LINK: 222_200 / 14.02 = ~15_848.7874465 LINK
+        // In 18 decimals: 15_848.7874465 LINK = 15_848_787_446_504_992_867_332
+        //
+        // So the liquidator receives:
+        // - 645_506.419401 LINK (base amount for covering the loan)
+        // - +15_848.7874465 LINK (reward)
+        // - = Total: ~661_355.2068475 LINK
+
+        vm.startPrank(liquidator);
+        engine.markVaultAsUnderwater(link, TEST_USER_1, true, liquidationAmt, false);
+        vm.stopPrank();
+
+        // Liquidator did not withdraw the liquidation outputs from protocol
+        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue2(link, liquidationAmt));
+
+        assertEq(calculatedRewards, actualRewards);
+        assertEq(engine.getUserCollateralBalance(link, liquidator), liquidatorWethBal);
+    }
+
+    function test_LiquidatingDAIVaultCalculatesRewardsForLiquidatorProperly() public {
+        // weth vault
+        bytes32 dai = collIds[4];
+        uint256 daiAmt = 3_575_000e18; // mints exactly  3.25m dsc
+        uint256 dscAmt = 3_250_000e18;
+
+        // Liquidator opens a usdt vault to acquire dsc for liquidation
+        address liquidator = makeAddr("Liquidator User");
+        address keeper = makeAddr("A different user who marks positions as unhealthy without liquidating them");
+        uint256 liquidatorUsdtAmt = 6_000_000e6; // 6m usdt
+        uint256 liquidatorDscAmt = 5_000_000e18; // 5m dsc
+
+        uint256 underwaterTime;
+
+        // Acquire liquidator's dsc
+        _depositCollateralAndMintDsc(collIds[3], liquidator, liquidatorUsdtAmt, liquidatorUsdtAmt, liquidatorDscAmt);
+
+        // Open dai vault for user 1 that will be liquidated
+        _depositCollateralAndMintDsc(dai, TEST_USER_1, daiAmt, daiAmt, dscAmt);
+
+        // 4 months (4*30*1 days) later, price of dai drops to $0.9987 from $1.0001 rendering the position of user 1
+        // liquidatable
+        vm.warp(block.timestamp + 120 days);
+        _mockPriceChange(dai, 9987e4);
+
+        uint256 liquidationAmt = 3_250_000e18;
+
+        // Mark the vault as underwater, so it can be liquidated later.
+        // In tests, separating the mark and liquidate steps makes it easier
+        // to compare expected vs actual rewards, rather than doing both
+        // in a single call to `markVaultAUnderwater()` with the liquidate
+        // parameter being true.
+        vm.startPrank(keeper);
+        // Only add the vault to the list of unhealthy vaults but not liquidate.
+        engine.markVaultAsUnderwater(dai, TEST_USER_1, false, 0, false);
+        underwaterTime = block.timestamp;
+        vm.stopPrank();
+
+        // Simulate a 2-hour delay since the keeper marked the position.
+        // As a result, the liquidator no longer qualifies for the 3% speedy execution discount.
+        // Liquidator will get a rate of 1.8% since 1 hours has elapsed since vault became underwater.
+        vm.warp(block.timestamp + 2 hours);
+
+        // First approve engine to consume dsc
+        _preApprove(liquidator, liquidationAmt);
+
+        // Arrange - check the expected & actual rewards before vault is liquidated
+        // Notice that 2 hours have elapsed so far
+        uint256 calculatedRewards = _computeRewards(dai, TEST_USER_1, underwaterTime);
+        uint256 actualRewardsUsd = engine.calculateLiquidationRewards(dai, TEST_USER_1);
+        uint256 actualRewards = engine.getTokenAmountFromUsdValue2(dai, actualRewardsUsd);
+
+        // Liquidator tries to mark and liquidate in a single call.
+        // Since the keeper had already marked the vault as underwater earlier,
+        // the discount is calculated from that original marking time — not the liquidation call.
+        //
+        // Liquidation math breakdown:
+        // - Loan to cover: 3_250_000 dsc
+        // - Base DAI collateral to receive = 3_250_000 / 0.9987 = ~3_254_230.49965
+        //
+        // Discounts (Higher discounts for speedy liquidations of underwater positions):
+        // Liquidation took place 2 hours since vault became underwater, meaning a 1.8% as discount rate
+        // Additional reward based on debt size; this is a low risk collateral vault hence a rate of 0.5%
+        // But since this exceeds the upper limit of the reward based on size of 5_000 dsc, then the liquidator
+        // will only get a max of 5_000 dsc instead of 16_250 dsc
+        // - Time-based discount (2 hours  passed): 1.8% of 3_250_000 = 58_500 dsc
+        // - Size-based reward (0.5% of 3_250_000 = 16_250 dsc), capped at 5_000 dsc
+        //
+        // Total reward in dsc: 58_500 + 5_000 = 63_500 dsc
+        // Converted to DAI: 63_500 / 0.9987 = ~63_582.6574547 DAI
+        // In 18 decimals: 63_582.6574547 DAI = 63582.657454691098427956
+        //
+        // So the liquidator receives:
+        // - 3_254_230.49965 DAI (base amount for covering the loan)
+        // - +63_582.6574547 DAI(reward)
+        // - = Total: ~3_317_813.1571 DAI
+
+        vm.startPrank(liquidator);
+        engine.markVaultAsUnderwater(dai, TEST_USER_1, true, liquidationAmt, false);
+        vm.stopPrank();
+
+        // Liquidator did not withdraw the liquidation outputs from protocol
+        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue2(dai, liquidationAmt));
+
+        assertEq(calculatedRewards, actualRewards);
+        assertEq(engine.getUserCollateralBalance(dai, liquidator), liquidatorWethBal);
+    }
+
+    function test_LiquidatingUSDTVaultCalculatesRewardsForLiquidatorProperlyAndEmits() public {
+        // weth vault
+        bytes32 usdt = collIds[3];
+        uint256 usdtAmt = 3_900_000e6; // mints exactly  3.25m dsc
+        uint256 dscAmt = 3_250_000e18;
+
+        // Liquidator opens a usdt vault to acquire dsc for liquidation
+        address liquidator = makeAddr("Liquidator User");
+        address keeper = makeAddr("A different user who marks positions as unhealthy without liquidating them");
+        uint256 liquidatorUsdtAmt = 6_000_000e6; // 6m usdt
+        uint256 liquidatorDscAmt = 5_000_000e18; // 5m dsc
+
+        uint256 underwaterTime;
+
+        // Acquire liquidator's dsc
+        _depositCollateralAndMintDsc(collIds[3], liquidator, liquidatorUsdtAmt, liquidatorUsdtAmt, liquidatorDscAmt);
+
+        // Open usdt vault for user 1 that will be liquidated
+        _depositCollateralAndMintDsc(usdt, TEST_USER_1, usdtAmt, usdtAmt, dscAmt);
+
+        // 2 weeks later, price of usdt drops to $0.9991 from $1.0001 rendering the position of user 1
+        // liquidatable
+        vm.warp(block.timestamp + 2 weeks);
+        _mockPriceChange(usdt, 9991e14);
+
+        uint256 liquidationAmt = 3_250_000e18;
+
+        // Mark the vault as underwater, so it can be liquidated later.
+        // In tests, separating the mark and liquidate steps makes it easier
+        // to compare expected vs actual rewards, rather than doing both
+        // in a single call to `markVaultAUnderwater()` with the liquidate
+        // parameter being true.
+        vm.startPrank(keeper);
+        // Only add the vault to the list of unhealthy vaults but not liquidate.
+        engine.markVaultAsUnderwater(usdt, TEST_USER_1, false, 0, false);
+        underwaterTime = block.timestamp;
+        vm.stopPrank();
+
+        // Simulate a 43-minute delay since the keeper marked the position.
+        // As a result, the liquidator no longer qualifies for the 3% speedy execution discount.
+        // Liquidator will get a rate between 3% and 1.8%.
+        vm.warp(block.timestamp + 43 minutes);
+
+        // First approve engine to consume dsc
+        _preApprove(liquidator, liquidationAmt);
+
+        // Arrange - check the expected & actual rewards before vault is liquidated
+        // Notice that 43 minutes have elapsed so far
+        uint256 calculatedRewards = _computeRewards(usdt, TEST_USER_1, underwaterTime);
+        uint256 actualRewardsUsd = engine.calculateLiquidationRewards(usdt, TEST_USER_1);
+        uint256 actualRewards = engine.getTokenAmountFromUsdValue2(usdt, actualRewardsUsd);
+
+        // Liquidator tries to mark and liquidate in a single call.
+        // Since the keeper had already marked the vault as underwater earlier,
+        // the discount is calculated from that original marking time — not the liquidation call.
+        //
+        // Liquidation math breakdown:
+        // - Loan to cover: 3_250_000 dsc
+        // - Base USDT collateral to receive = 3_250_000 / 0.9991 = ~3_252_927.63487
+        //
+        // Discounts (Higher discounts for speedy liquidations of underwater positions):
+        // Liquidation took place 43 minutes since vault became underwater, meaning a 2.14% as discount rate
+        // Additional reward based on debt size; this is a low risk collateral vault hence a rate of 0.5%
+        // But since this exceeds the upper limit of the reward based on size of 5_000 dsc, then the liquidator
+        // will only get a max of 5_000 dsc instead of 16_250 dsc
+        // - Time-based discount (43 minutes passed): 2.14% of 3_250_000 = 69_550 dsc
+        // - Size-based reward (0.5% of 3_250_000 = 16_250 dsc), capped at 5_000 dsc
+        //
+        // Total reward in dsc: 69_550 + 5_000 = 74_550 dsc
+        // Converted to USDT: 74_550 / 0.9991 = ~74_617.1554399 USDT
+        // In 6 decimals as used by USDT: 74_617.1554399 USDT = 74617.155439
+        //
+        // So the liquidator receives:
+        // - 3_252_927.63487 USDT (base amount for covering the loan)
+        // - +74_617.155439 USDT(reward)
+        // - = Total: ~3_327_544.79031 USDT
+
+        // This liquidation involves full rewards to liquidator
+        vm.expectEmit(true, true, false, true, address(engine));
+        emit LiquidationWithFullRewards(usdt, TEST_USER_1, liquidator);
+
+        vm.startPrank(liquidator);
+        engine.markVaultAsUnderwater(usdt, TEST_USER_1, true, liquidationAmt, false);
+        vm.stopPrank();
+
+        // Liquidator did not withdraw the liquidation outputs from protocol
+        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue2(usdt, liquidationAmt));
+
+        assertEq(calculatedRewards, actualRewards);
+        assertEq(engine.getUserCollateralBalance(usdt, liquidator), liquidatorWethBal);
+    }
+
+    function test_LiquidatingLINKVaultWithPartialRewardsEmits() public {
+        // link vault
+        bytes32 link = collIds[2];
+        uint256 linkAmt = 1_000_000e18; // mints exactly 9_212_500 dsc
+        uint256 dscAmt = 9_050_000e18;
+
+        // Liquidator opens a usdt vault to acquire dsc for liquidation
+        address liquidator = makeAddr("Liquidator User");
+        address keeper = makeAddr("A different user who marks positions as unhealthy without liquidating them");
+        uint256 liquidatorUsdtAmt = 12_000_000e6; // 12m usdt
+        uint256 liquidatorDscAmt = 10_000_000e18; // 10m dsc
+
+        uint256 underwaterTime;
+
+        // Acquire liquidator's dsc
+        _depositCollateralAndMintDsc(collIds[3], liquidator, liquidatorUsdtAmt, liquidatorUsdtAmt, liquidatorDscAmt);
+
+        // Open link vault for user 1 that will be liquidated
+        _depositCollateralAndMintDsc(link, TEST_USER_1, linkAmt, linkAmt, dscAmt);
+
+        // 2 days later, price of link drops to $9.06 from $14.74 rendering the position of user 1 liquidatable
+        vm.warp(block.timestamp + 2 days);
+        _mockPriceChange(link, 916e6);
+
+        // Mark the vault as underwater, so it can be liquidated later.
+        // In tests, separating the mark and liquidate steps makes it easier
+        // to compare expected vs actual rewards, rather than doing both
+        // in a single call to `markVaultAUnderwater()` with the liquidate
+        // parameter being true.
+        vm.startPrank(keeper);
+        // Only add the vault to the list of unhealthy vaults but not liquidate.
+        engine.markVaultAsUnderwater(link, TEST_USER_1, false, 0, false);
+        underwaterTime = block.timestamp;
+        vm.stopPrank();
+
+        // Simulate a 5-minute delay since the keeper marked the position.
+        // As a result, the liquidator no longer qualifies for the 3% speedy execution discount.
+        // Liquidator will get a rate between 3% and 1.8% but close to 3% as only 5 minutes have elapsed.
+        vm.warp(block.timestamp + 5 minutes);
+
+        // First approve engine to consume dsc
+        _preApprove(liquidator, dscAmt);
+
+        // Arrange - check the expected & actual rewards before vault is liquidated
+        // Notice that 5 minutes have elapsed so far
+        uint256 calculatedRewards = _computeRewards(link, TEST_USER_1, underwaterTime);
+        uint256 actualRewards =
+            engine.getTokenAmountFromUsdValue2(link, (engine.calculateLiquidationRewards(link, TEST_USER_1)));
+
+        // Liquidator tries to mark and liquidate in a single call.
+        // Since the keeper had already marked the vault as underwater earlier,
+        // the discount is calculated from that original marking time — not the liquidation call.
+        //
+        // Liquidation math breakdown:
+        // - Loan to cover: 9_050_000 dsc
+        // - Base LINK collateral to receive = 9_050_000 / 9.06 = ~998_896.247241 LINK
+        //
+        // Discounts (Higher discounts for speedy liquidations of underwater positions):
+        // Liquidation took place 5 minutes since vault became underwater, meaning a 2.9% as discount rate
+        // Additional reward based on debt size; this is a high risk collateral vault hence a rate of 1.5%
+        // But since this exceeds the upper limit of the reward based on size of 5_000 dsc, then the liquidator
+        // will only get a max of 5_000 dsc instead of 135_750 dsc
+        // - Time-based discount (30 minutes passed): 2.9% of 9_050_000 = 262_450 dsc
+        // - Size-based reward (1.5% of 9_050_000 = 135_750 dsc), capped at 5_000 dsc
+        //
+        // Total reward in dsc: 262_450 + 5_000 = 267_450 dsc
+        // Converted to LINK: 267_450 / 9.06 = ~29_519.8675497 LINK
+        // In 18 decimals: 29_519.8675497 LINK =
+        //
+        // So what the liquidator should receive is:
+        // - 998_896.247241 LINK (base amount for covering the loan)
+        // - +29_519.8675497 LINK (reward)
+        // - = Total: ~ 1_028_416.11479 LINK
+        // However, only 1_000_000 LINK is locked in this vault and it is also from the 1m LINK
+        // where fees are deducted from and liquidation penalty.
+        // Fees for 2 days 5 minutes as calculated below is 54.230494739220886256 LINK
+        // Liquidation penalty as calculated below is: 9879.912663755458515283 LINK
+        // Thus the actual output that liquidator gets is not 1_028_416.11479 LINK but rather
+        // = 1 million vault LINK - 54.230494739220886256 LINK - 9879.912663755458515283 LINK
+        // = 990065.856841505320598461 LINK
+
+        vm.expectEmit(true, true, false, true, address(engine));
+        emit LiquidationWithPartialRewards(link, TEST_USER_1, liquidator);
+
+        vm.startPrank(liquidator);
+        engine.markVaultAsUnderwater(link, TEST_USER_1, true, dscAmt, false);
+        vm.stopPrank();
+
+        // Liquidator did not withdraw the liquidation outputs from protocol
+        // But got all the remainder after fees and liquidation penalty was taken from the 1m LINK
+        // 1% liquidation penalty
+        uint256 penaltyInLINK = engine.getTokenAmountFromUsdValue2(link, ((dscAmt * 1e16) / 1e18));
+
+        // Fees for having the vault for 2 days and 5 minutes - 2885 minutes
+        // APR is 1% annual fee
+        // fee formula = (debt * APR * deltaTime) / (SECONDS_IN_YEAR * PRECISION);
+        uint256 feesInLINK =
+            engine.getTokenAmountFromUsdValue2(link, ((dscAmt * 1e16 * 2885 minutes) / (365 days * 1e18)));
+
+        assertEq(engine.getUserCollateralBalance(link, liquidator), (linkAmt - penaltyInLINK - feesInLINK));
+        assertEq(calculatedRewards, actualRewards);
     }
 
 }

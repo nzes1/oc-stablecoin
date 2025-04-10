@@ -74,9 +74,9 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
     event DscMinted(address indexed owner, uint256 amount);
-    event LiquidationWithFullRewards(bytes32 collId, address owner, address liquidator);
-    event LiquidationWithPartialRewards(bytes32 collId, address owner, address liquidator);
-    event AbsorbedBadDebt(bytes32 collId, address owner);
+    event LiquidationWithFullRewards(bytes32 indexed collId, address indexed owner, address liquidator);
+    event LiquidationWithPartialRewards(bytes32 indexed collId, address indexed owner, address liquidator);
+    event AbsorbedBadDebt(bytes32 indexed collId, address indexed owner);
     event LiquidationSurplusReturned(bytes32 collId, address owner, uint256 amount);
 
     /*//////////////////////////////////////////////////////////////
@@ -314,6 +314,8 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
             s_absorbedBadVaults[collId][address(this)] =
                 Structs.Vault({lockedCollateral: vaultCollBal, dscDebt: dscToRepay, lastUpdatedAt: block.timestamp});
             emit AbsorbedBadDebt(collId, owner);
+
+            // Then refund the liquidator their dsc that had been
         }
 
         // Withdraw
@@ -446,7 +448,7 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         s_vaults[collId][owner].lastUpdatedAt = block.timestamp;
     }
 
-    function settleLiquidationPenalty(bytes32 collId, address owner, uint256 debt) internal {
+    function settleLiquidationPenalty(bytes32 collId, address owner, uint256 debt) public {
         uint256 penalty = calculateLiquidationPenalty(debt);
 
         uint256 penaltyTokenAmount = getTokenAmountFromUsdValue2(collId, penalty);
@@ -544,6 +546,10 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
 
     function calculateFees(uint256 debt, uint256 debtPeriod) external pure returns (uint256) {
         return calculateProtocolFee(debt, debtPeriod);
+    }
+
+    function getUnderwaterTime(bytes32 collId, address owner) external view returns (uint256) {
+        return firstUnderwaterTime[collId][owner];
     }
 
 }
