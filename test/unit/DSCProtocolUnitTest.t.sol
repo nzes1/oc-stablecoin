@@ -48,6 +48,7 @@ contract DSCProtocolUnitTest is Test {
 
     error LM__SuppliedDscNotEnoughToRepayBadDebt();
     error LM__VaultNotLiquidatable();
+    error OwnableUnauthorizedAccount(address account);
 
     function setUp() public {
         deployer = new DeployDSC();
@@ -87,6 +88,91 @@ contract DSCProtocolUnitTest is Test {
 
         // engine owned by default sender on anvil
         assertTrue(engine.owner() == address(deployer));
+    }
+
+    function test_RevertWhenConfiguringAnAlreadyConfiguredCollateralType() public {
+        // Attempt to reconfigure LINK which is already set during deployment.
+        bytes32 collId = "LINK";
+        address tokenAddr = makeAddr("Fake Link Address");
+        uint256 liqThreshold = 625000000000000000;
+        address priceFeed = makeAddr("LINK token price feed address");
+        uint8 linkDecimals = 18;
+
+        vm.expectRevert(abi.encodeWithSelector(DSCEngine.DSCEngine__CollateralConfigurationAlreadySet.selector, collId));
+
+        vm.startPrank(address(deployer));
+        engine.configureCollateral(collId, tokenAddr, liqThreshold, priceFeed, linkDecimals);
+        vm.stopPrank();
+    }
+
+    function test_RevertWhenNonAdminAttemptsToAddNewCollateralSupportToTheProtocol() public {
+        bytes32 collId = "DOGE";
+        address tokenAddr = makeAddr("Fake DOGE Address");
+        uint256 liqThreshold = 625000000000000000;
+        address priceFeed = makeAddr("DOGE token price feed address");
+        uint8 dogeDecimals = 8;
+
+        vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, TEST_USER_1));
+
+        vm.startPrank(TEST_USER_1);
+        engine.configureCollateral(collId, tokenAddr, liqThreshold, priceFeed, dogeDecimals);
+        vm.stopPrank();
+    }
+
+    function test_AdminCanConfigureAdditionalCollateralPostDeployment() public {
+        // USDC on sepolia
+        bytes32 collId = "USDC";
+        address tokenAddr = 0xf08A50178dfcDe18524640EA6618a1f965821715;
+        uint256 liqThreshold = 833333333333333333; // 120% OC
+        address priceFeed = 0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E;
+        uint8 usdcDecimals = 6;
+
+        vm.startPrank(address(deployer));
+        engine.configureCollateral(collId, tokenAddr, liqThreshold, priceFeed, usdcDecimals);
+        vm.stopPrank();
+
+        bytes32[] memory allowedCollaterals = engine.getAllowedCollateralIds();
+
+        assertEq(allowedCollaterals.length, 6); // 5 were added during deployment
+        assertEq(allowedCollaterals[allowedCollaterals.length - 1], collId);
+    }
+
+    function test_RevertWhenAdminAttemptsRemovalOfCollateralConfigurationThatHasOpenVaults() public {
+        // Open a LINK vault
+        bytes32 link = collIds[2];
+        uint256 linkAmt = 110e18; // mints ~ 1000 dsc
+        uint256 dscAmt = 1000e18;
+
+        _depositCollateralAndMintDsc(link, TEST_USER_2, linkAmt, linkAmt, dscAmt);
+
+        // Admin attempts to remove LINK configurations
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DSCEngine.DSCEngine__CollateralConfigurationCannotBeRemovedWithOutstandingDebt.selector, dscAmt
+            )
+        );
+
+        vm.startPrank(address(deployer));
+        engine.removeCollateralConfiguration(link);
+        vm.stopPrank();
+    }
+
+    function test_AdminCanRemoveCollateralConfiguration() public {
+        // Collaterals are indexed as follows;
+        // ETH, WETH, LINK, USDT, DAI
+        // Removing LINK position DAI at position 2 and USDT becomes the last ID on the array
+        bytes32[] memory allowedCollateralsStart = engine.getAllowedCollateralIds();
+
+        vm.startPrank(address(deployer));
+        engine.removeCollateralConfiguration(collIds[2]);
+        vm.stopPrank();
+
+        bytes32[] memory allowedCollateralsEnd = engine.getAllowedCollateralIds();
+
+        assertEq(engine.getCollateralAddress(collIds[2]), address(0));
+        assertLt(allowedCollateralsEnd.length, allowedCollateralsStart.length);
+        assertEq(allowedCollateralsEnd[2], "DAI");
+        assertEq(allowedCollateralsEnd[allowedCollateralsEnd.length - 1], "USDT");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -1426,7 +1512,7 @@ contract DSCProtocolUnitTest is Test {
         //
         // Total reward in dsc: 262_450 + 5_000 = 267_450 dsc
         // Converted to LINK: 267_450 / 9.06 = ~29_519.8675497 LINK
-        // In 18 decimals: 29_519.8675497 LINK =
+        // In 18 decimals: 29_519.8675497 LINK = 29197.598253275109170305
         //
         // So what the liquidator should receive is:
         // - 998_896.247241 LINK (base amount for covering the loan)
@@ -1460,6 +1546,103 @@ contract DSCProtocolUnitTest is Test {
 
         assertEq(engine.getUserCollateralBalance(link, liquidator), (linkAmt - penaltyInLINK - feesInLINK));
         assertEq(calculatedRewards, actualRewards);
+        console.log("calc", calculatedRewards);
+    }
+
+    function test_LiquidationOfDeeplyUnderwaterVaultTriggersBadDebtAbsorptionByProtocolAndEmits() public {
+        // link vault
+        bytes32 link = collIds[2];
+        uint256 linkAmt = 1_000_000e18; // mints exactly 9_212_500 dsc
+        uint256 dscAmt = 9_050_000e18;
+
+        // Liquidator opens a usdt vault to acquire dsc for liquidation
+        address liquidator = makeAddr("Liquidator User");
+        address keeper = makeAddr("A different user who marks positions as unhealthy without liquidating them");
+        uint256 liquidatorUsdtAmt = 12_000_000e6; // 12m usdt
+        uint256 liquidatorDscAmt = 10_000_000e18; // 10m dsc
+
+        uint256 underwaterTime;
+
+        // Acquire liquidator's dsc
+        _depositCollateralAndMintDsc(collIds[3], liquidator, liquidatorUsdtAmt, liquidatorUsdtAmt, liquidatorDscAmt);
+
+        // Open link vault for user 1 that will be liquidated
+        _depositCollateralAndMintDsc(link, TEST_USER_1, linkAmt, linkAmt, dscAmt);
+
+        // 90 days later, price of link drops to $4.06 from $14.74 rendering the position of user 1 liquidatable
+        /// and deeply undercollateralized.
+        vm.warp(block.timestamp + 90 days);
+        _mockPriceChange(link, 406e6);
+
+        // Mark the vault as underwater, so it can be liquidated later.
+        // In tests, separating the mark and liquidate steps makes it easier
+        // to compare expected vs actual rewards, rather than doing both
+        // in a single call to `markVaultAUnderwater()` with the liquidate
+        // parameter being true.
+        vm.startPrank(keeper);
+        // Only add the vault to the list of unhealthy vaults but not liquidate.
+        engine.markVaultAsUnderwater(link, TEST_USER_1, false, 0, false);
+        underwaterTime = block.timestamp;
+        vm.stopPrank();
+
+        // Simulate a 16-minute delay since the keeper marked the position.
+        // As a result, the liquidator no longer qualifies for the 3% speedy execution discount.
+        // Liquidator will get a rate between 3% and 1.8%.
+        vm.warp(block.timestamp + 16 minutes);
+
+        // First approve engine to consume dsc
+        _preApprove(liquidator, dscAmt);
+
+        // Arrange - check the expected & actual rewards before vault is liquidated
+        // Notice that 16 minutes have elapsed so far
+        uint256 calculatedRewards = _computeRewards(link, TEST_USER_1, underwaterTime);
+        uint256 liquidatorDscBefore = ERC20Like(address(dsc)).balanceOf(liquidator);
+
+        // Liquidator tries to mark and liquidate in a single call.
+        // Since the keeper had already marked the vault as underwater earlier,
+        // the discount is calculated from that original marking time — not the liquidation call.
+        //
+        // Liquidation math breakdown:
+        // - Loan to cover: 9_050_000 dsc
+        // - Base LINK collateral to receive = 9_050_000 / 9.06 = ~2_229_064.03941 LINK
+        // - Notice that the base collateral that liquidator should get already exceeds the  locked collateral balance
+        // of 1_000_000 LINK. This means that this liquidation will not yield any rewards/outputs to liquidator and thus
+        // the protocol will absorb it as a bad debt.
+        //
+        // Discounts (Higher discounts for speedy liquidations of underwater positions):
+        // Liquidation took place 16 minutes since vault became underwater, meaning a 2.68% as discount rate
+        // Additional reward based on debt size; this is a high risk collateral vault hence a rate of 1.5%
+        // But since this exceeds the upper limit of the reward based on size of 5_000 dsc, then the liquidator
+        // will only get a max of 5_000 dsc instead of 135_750 dsc
+        // - Time-based discount (16 minutes passed): 2.68% of 9_050_000 = 242_540 dsc
+        // - Size-based reward (1.5% of 9_050_000 = 135_750 dsc), capped at 5_000 dsc
+        //
+        // Total reward in dsc: 242_540 + 5_000 = 247_540 dsc
+        // Converted to LINK: 267_450 / 4.06 = ~60_970.4433497 LINK
+        // In 18 decimals: 60_970.4433497 LINK =
+        //
+        // So what the liquidator should receive is:
+        // - 2_229_064.03941 LINK (base amount for covering the loan)
+        // - +60_970.4433497 LINK (reward)
+        // - = Total: ~ 2_290_034.48276 LINK
+        // However, only 1_000_000 LINK is locked in this vault and it is also from the 1m LINK
+        // where fees are deducted from and liquidation penalty.
+        // Since the output of liquidation is greater than the locked collateral and also the base pay is greater than
+        // 1m LINK that is currently locked in this vault, then this liquidation results to the vault being absorbed
+        // as bad debt.
+
+        vm.expectEmit(true, true, false, false, address(engine));
+        emit AbsorbedBadDebt(link, TEST_USER_1);
+
+        vm.startPrank(liquidator);
+        engine.markVaultAsUnderwater(link, TEST_USER_1, true, dscAmt, false);
+        vm.stopPrank();
+
+        uint256 expectedOutput = calculatedRewards + (engine.getTokenAmountFromUsdValue2(link, dscAmt));
+        uint256 liquidatorDscAfter = ERC20Like(address(dsc)).balanceOf(liquidator);
+
+        assertGt(expectedOutput, linkAmt);
+        assertEq(liquidatorDscBefore, liquidatorDscAfter);
     }
 
 }

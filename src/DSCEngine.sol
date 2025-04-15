@@ -96,18 +96,6 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
     //////////////////////////////////////////////////////////////*/
-
-    /**
-     * @notice Modifier to check that the amount is more than zero.
-     * @dev Reverts if the amount is zero.
-     */
-    modifier moreThanZero(uint256 amount) {
-        if (amount == 0) {
-            revert DSCEngine__ZeroAmountNotAllowed();
-        }
-        _;
-    }
-
     modifier isValidDebtSize(uint256 dscAmt) {
         if (dscAmt < MIN_DEBT) {
             revert DSCEngine__DebtSizeBelowMinimumAmountAllowed(MIN_DEBT);
@@ -315,7 +303,8 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
                 Structs.Vault({lockedCollateral: vaultCollBal, dscDebt: dscToRepay, lastUpdatedAt: block.timestamp});
             emit AbsorbedBadDebt(collId, owner);
 
-            // Then refund the liquidator their dsc that had been
+            // Then refund the liquidator their dsc that had been burnt by directly minting them new dsc
+            i_DSC.mint(liquidator, dscToRepay);
         }
 
         // Withdraw
@@ -345,6 +334,7 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
     }
 
     // no health check!!! --- problem because this is a public func--corrected
+    // but will burning ever break HF?
     function burnDSC(bytes32 collId, uint256 dscAmt) public {
         _burnDSC(collId, dscAmt, msg.sender, msg.sender);
 
@@ -448,7 +438,7 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         s_vaults[collId][owner].lastUpdatedAt = block.timestamp;
     }
 
-    function settleLiquidationPenalty(bytes32 collId, address owner, uint256 debt) public {
+    function settleLiquidationPenalty(bytes32 collId, address owner, uint256 debt) internal {
         uint256 penalty = calculateLiquidationPenalty(debt);
 
         uint256 penaltyTokenAmount = getTokenAmountFromUsdValue2(collId, penalty);
@@ -499,7 +489,7 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         /// this removal needs to be tested....seems incomplete the swap bit
         for (uint256 k = 0; k < s_collateralIds.length; k++) {
             if (s_collateralIds[k] == collId) {
-                s_collateralIds[k] = bytes32(s_collateralIds.length - 1);
+                s_collateralIds[k] = s_collateralIds[s_collateralIds.length - 1];
                 s_collateralIds.pop();
                 break;
             }
@@ -546,10 +536,6 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
 
     function calculateFees(uint256 debt, uint256 debtPeriod) external pure returns (uint256) {
         return calculateProtocolFee(debt, debtPeriod);
-    }
-
-    function getUnderwaterTime(bytes32 collId, address owner) external view returns (uint256) {
-        return firstUnderwaterTime[collId][owner];
     }
 
 }
