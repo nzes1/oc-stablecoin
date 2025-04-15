@@ -12,6 +12,7 @@ import {Structs} from "../../src/Structs.sol";
 import {CollateralManager} from "../../src/CollateralManager.sol";
 import {ERC20Like} from "../mocks/ERC20Like.sol";
 import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
+import {MockFailedMintDSC} from "../mocks/MockFailedMintDSC.sol";
 
 // 0 ETH
 // 1 WETH
@@ -514,6 +515,71 @@ contract DSCProtocolUnitTest is Test {
         ERC20Like(engine.getCollateralAddress(weth)).approve(address(engine), dscSecondMint);
         vm.expectPartialRevert(DSCEngine.DSCEngine__HealthFactorBelowThreshold.selector);
         engine.expandVault(weth, wethSecondDeposit, dscSecondMint);
+        vm.stopPrank();
+    }
+
+    function test_RevertIfTokenMintFailsWhileExpandingVault() public {
+        bytes32 link = collIds[2];
+        uint256 initialLinkAmt = 1000e18; // mints ~ 9212.5 dsc
+        uint256 initialDscAmt = 9000e18;
+        uint256 topUpLinkAmt = 500e18;
+        uint256 topUpDscAmt = 4000e18;
+
+        // open vault
+        _depositCollateralAndMintDsc(link, TEST_USER_2, initialLinkAmt, initialLinkAmt, initialDscAmt);
+
+        // 2 weeks later
+        vm.warp(block.timestamp + 2 weeks);
+
+        // Update price feed to avoid staleness error
+        _mockPriceChange(link, 1474e6);
+
+        (uint256 lockedLink, uint256 dscDebt) = engine.getVaultInformation(link, TEST_USER_2);
+
+        assertEq(lockedLink, initialLinkAmt);
+        assertEq(dscDebt, initialDscAmt);
+
+        // Mock failing mint of vault expansion
+        // A custom engine deployment that uses the MockFailedMintDSC is required
+        MockFailedMintDSC mockFailedMint = new MockFailedMintDSC();
+        Structs.DeploymentConfig[] memory mockConfigs = helper.getConfigs();
+        DSCEngine mockEngine = new DSCEngine(mockConfigs, address(mockFailedMint));
+        mockFailedMint.transferOwnership(address(mockEngine));
+
+        vm.startPrank(TEST_USER_2);
+        ERC20Like(mockEngine.getCollateralAddress(link)).approve(address(mockEngine), topUpLinkAmt);
+        vm.stopPrank();
+
+        vm.expectRevert(DSCEngine.DSCEngine__MintingDSCFailed.selector);
+        vm.startPrank(TEST_USER_2);
+        mockEngine.expandVault(link, topUpLinkAmt, topUpDscAmt);
+        vm.stopPrank();
+    }
+
+    function test_RevertIfTokenMintFailsWhileOpeningVault() public {
+        bytes32 dai = collIds[4];
+        uint256 daiAmt = 11_000e18; // mints 10k dsc
+        uint256 dscAmt = 10_000e18;
+
+        // mint dai to test user
+        _mint(dai, TEST_USER_2);
+        
+        // mock engine deployment
+        MockFailedMintDSC mockFailedMint = new MockFailedMintDSC();
+        Structs.DeploymentConfig[] memory mockConfigs = helper.getConfigs();
+        DSCEngine mockEngine = new DSCEngine(mockConfigs, address(mockFailedMint));
+        mockFailedMint.transferOwnership(address(mockEngine));
+
+        // approve mock engine to spend test user's dai
+        vm.startPrank(TEST_USER_2);
+        ERC20Like(mockEngine.getCollateralAddress(dai)).approve(address(mockEngine), daiAmt);
+        vm.stopPrank();
+
+        // open a dai vault
+        vm.expectRevert(DSCEngine.DSCEngine__MintingDSCFailed.selector);
+
+        vm.startPrank(TEST_USER_2);
+        mockEngine.depositCollateralAndMintDSC(dai, daiAmt, dscAmt);
         vm.stopPrank();
     }
 
