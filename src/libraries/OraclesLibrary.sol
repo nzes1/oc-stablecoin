@@ -16,6 +16,7 @@ import {AggregatorV3Interface} from "@chainlink/contracts@v1.3.0/src/v0.8/shared
  * @dev This contract is used to check the staleness of Chainlink price feeds.
  */
 library OraclesLibrary {
+
     uint256 private constant STALE_THRESHOLD = 2 hours;
 
     error OraclesLibrary__StalePriceFeed();
@@ -35,4 +36,5 @@ library OraclesLibrary {
 
         return (roundId, answer, startedAt, updatedAt, answeredInRound);
     }
+
 }

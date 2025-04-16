@@ -10,6 +10,7 @@ pragma solidity ^0.8.0;
  * its answer is unimportant
  */
 contract MockV3Aggregator {
+
     uint256 public constant version = 0;
 
     uint8 public decimals;
@@ -69,4 +70,5 @@ contract MockV3Aggregator {
     function description() external pure returns (string memory) {
         return "v0.6/tests/MockV3Aggregator.sol";
     }
+
 }

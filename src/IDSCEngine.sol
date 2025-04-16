@@ -3,6 +3,7 @@
 pragma solidity 0.8.24;
 
 interface IDSCEngine {
+
     /**
      * @dev Deposit collateral to mint DSC tokens
      * @param tokenAddr Address of the collateral token
@@ -57,4 +58,5 @@ interface IDSCEngine {
      * @return Health factor of the account
      */
     function getHealthFactor(address account) external returns (uint256);
+
 }

@@ -3,6 +3,7 @@
 pragma solidity 0.8.24;
 
 library Structs {
+
     struct CollateralConfig {
         address tokenAddr;
         uint256 totalDebt;
@@ -36,4 +37,5 @@ library Structs {
         address priceFeed;
         uint8 decimals;
     }
+
 }

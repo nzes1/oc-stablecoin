@@ -8,6 +8,7 @@ import {ERC20Like} from "../test/mocks/ERC20Like.sol";
 import {Structs} from "../src/Structs.sol";
 
 contract HelperConfig is Script {
+
     // OCR ratios are as follows
     // WETH = 170% => LT = (1e18 * 100 )/ 170 == 588235294117647058.8
     // LINK = 160% => LT = (1e18 * 100 )/ 160 == 625000000000000000
@@ -176,4 +177,5 @@ contract HelperConfig is Script {
 
         return deploymentConfigs;
     }
+
 }

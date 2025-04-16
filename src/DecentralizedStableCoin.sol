@@ -51,6 +51,7 @@ import {ERC20Permit} from "@openzeppelin/contracts@5.1.0/token/ERC20/extensions/
  * and burning to the owner of the contract - which is the DSCEngine contract.
  */
 contract DecentralizedStableCoin is Ownable, ERC20Burnable, ERC20Permit {
+
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
@@ -130,4 +131,5 @@ contract DecentralizedStableCoin is Ownable, ERC20Burnable, ERC20Permit {
     function burnFrom(address account, uint256 value) public override onlyOwner {
         super.burnFrom(account, value);
     }
+
 }

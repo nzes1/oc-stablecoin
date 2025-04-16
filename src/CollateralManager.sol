@@ -13,6 +13,7 @@ import {Storage} from "./Storage.sol";
 // Storage of the state of balances
 
 contract CollateralManager is Storage {
+
     error CM__CollateralTokenNotApproved();
     error CM__ZeroAmountNotAllowed();
     error CM__AmountExceedsCurrentBalance(bytes32 collId, uint256 bal);
@@ -91,4 +92,5 @@ contract CollateralManager is Storage {
             return (true, config.tokenAddr);
         }
     }
+
 }

@@ -9,6 +9,7 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 import {Structs} from "../src/Structs.sol";
 
 contract DeployDSC is Script {
+
     function run() external returns (DecentralizedStableCoin, DSCEngine, HelperConfig) {
         /// prepare arguments for DSCEngine deployment.
         HelperConfig helper = new HelperConfig();
@@ -27,4 +28,5 @@ contract DeployDSC is Script {
 
         return (dsc, engine, helper);
     }
+
 }

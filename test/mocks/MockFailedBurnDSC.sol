@@ -6,7 +6,7 @@ import {ERC20Burnable, ERC20} from "@openzeppelin/contracts@5.1.0/token/ERC20/ex
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC20Permit} from "@openzeppelin/contracts@5.1.0/token/ERC20/extensions/ERC20Permit.sol";
 
-contract MockFailedMintDSC is Ownable, ERC20Burnable, ERC20Permit {
+contract MockFailedBurnDSC is Ownable, ERC20Burnable, ERC20Permit {
 
     uint256 private constant MINIMUM_BURN_AMOUNT = 1;
 
@@ -18,7 +18,7 @@ contract MockFailedMintDSC is Ownable, ERC20Burnable, ERC20Permit {
 
     error DecentralizedStableCoin__InvalidRecipientAddress();
 
-    constructor() Ownable(msg.sender) ERC20("MockFailedMintDSC", "DSC") ERC20Permit("DecentralizedStableCoin") {}
+    constructor() Ownable(msg.sender) ERC20("MockFailedBurnDSC", "DSC") ERC20Permit("DecentralizedStableCoin") {}
 
     function burn(uint256 burnTokensAmt) public override onlyOwner {
         uint256 userBalance = balanceOf(msg.sender);
@@ -45,7 +45,7 @@ contract MockFailedMintDSC is Ownable, ERC20Burnable, ERC20Permit {
         }
 
         _mint(account, mintAmt);
-        return false;
+        return true;
     }
 
     function transferFrom(address, /*sender*/ address, /*recipient*/ uint256 /*amount*/) public pure override returns (bool)

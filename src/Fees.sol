@@ -5,6 +5,7 @@ pragma solidity 0.8.24;
 import {Storage} from "./Storage.sol";
 
 contract Fees is Storage {
+
     //Annual Percentage Rate = 1% which is 1e16
 
     function calculateProtocolFee(uint256 debt, uint256 deltaTime) internal pure returns (uint256) {
@@ -20,4 +21,5 @@ contract Fees is Storage {
 
         return penalty;
     }
+
 }

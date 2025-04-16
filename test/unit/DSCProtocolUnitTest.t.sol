@@ -13,6 +13,7 @@ import {CollateralManager} from "../../src/CollateralManager.sol";
 import {ERC20Like} from "../mocks/ERC20Like.sol";
 import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 import {MockFailedMintDSC} from "../mocks/MockFailedMintDSC.sol";
+import {MockFailedBurnDSC} from "../mocks/MockFailedBurnDSC.sol";
 
 // 0 ETH
 // 1 WETH
@@ -563,7 +564,7 @@ contract DSCProtocolUnitTest is Test {
 
         // mint dai to test user
         _mint(dai, TEST_USER_2);
-        
+
         // mock engine deployment
         MockFailedMintDSC mockFailedMint = new MockFailedMintDSC();
         Structs.DeploymentConfig[] memory mockConfigs = helper.getConfigs();
@@ -580,6 +581,33 @@ contract DSCProtocolUnitTest is Test {
 
         vm.startPrank(TEST_USER_2);
         mockEngine.depositCollateralAndMintDSC(dai, daiAmt, dscAmt);
+        vm.stopPrank();
+    }
+
+    function test_RevertIfTokenTransferFailsWhileBurningDscTokensFromVault() public {
+        bytes32 dai = collIds[4];
+        uint256 daiAmt = 11_000e18; // mints 10k dsc
+        uint256 dscAmt = 10_000e18;
+
+        // mint dai to test user
+        _mint(dai, TEST_USER_2);
+
+        // mock engine deployment
+        MockFailedBurnDSC mockFailedMint = new MockFailedBurnDSC();
+        Structs.DeploymentConfig[] memory mockConfigs = helper.getConfigs();
+        DSCEngine mockEngine = new DSCEngine(mockConfigs, address(mockFailedMint));
+        mockFailedMint.transferOwnership(address(mockEngine));
+
+        // Open a dai vault
+        vm.startPrank(TEST_USER_2);
+        ERC20Like(mockEngine.getCollateralAddress(dai)).approve(address(mockEngine), daiAmt);
+        mockEngine.depositCollateralAndMintDSC(dai, daiAmt, dscAmt);
+        vm.stopPrank();
+
+        vm.expectRevert(DSCEngine.DSCEngine__BurningDSCFailed.selector);
+
+        vm.startPrank(TEST_USER_2);
+        mockEngine.burnDSC(dai, 5000e18);
         vm.stopPrank();
     }
 
