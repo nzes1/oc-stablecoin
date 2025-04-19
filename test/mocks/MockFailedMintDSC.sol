@@ -48,7 +48,15 @@ contract MockFailedMintDSC is Ownable, ERC20Burnable, ERC20Permit {
         return false;
     }
 
-    function transferFrom(address, /*sender*/ address, /*recipient*/ uint256 /*amount*/) public pure override returns (bool)
+    function transferFrom(
+        address, /*sender*/
+        address, /*recipient*/
+        uint256 /*amount*/
+    )
+        public
+        pure
+        override
+        returns (bool)
     {
         return false;
     }
@@ -58,5 +66,7 @@ contract MockFailedMintDSC is Ownable, ERC20Burnable, ERC20Permit {
     function burnFrom(address account, uint256 value) public override onlyOwner {
         super.burnFrom(account, value);
     }
+
+    function test() public {}
 
 }

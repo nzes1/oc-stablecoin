@@ -14,7 +14,6 @@ contract Storage {
     uint256 internal constant LIQ_DISCOUNT_START = 3e16; // 3%
     uint256 internal constant LIQ_DISCOUNT_END = 18e15; // 1.8%
     uint256 internal constant LIQ_DISCOUNT_DECAY_TIME = 1 hours;
-    //uint256 internal constant LIQ_DISCOUNT_SCALE = 100e18;
     uint256 internal constant LIQ_MIN_REWARD = 10e18; // 10 dsc
     uint256 internal constant LIQ_MAX_REWARD = 5000e18; // 5000 dsc
     uint256 internal constant LIQ_REWARD_PER_DEBT_SIZE_LOW_RISK = 5e15; // 0.5%

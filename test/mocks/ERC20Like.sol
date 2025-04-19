@@ -25,4 +25,6 @@ contract ERC20Like is ERC20 {
         _burn(account, amount);
     }
 
+    function test() public {}
+
 }

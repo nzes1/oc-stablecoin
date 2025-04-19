@@ -71,4 +71,6 @@ contract MockV3Aggregator {
         return "v0.6/tests/MockV3Aggregator.sol";
     }
 
+    function test() public {}
+
 }

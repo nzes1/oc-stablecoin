@@ -6,24 +6,30 @@ import {IERC20 as ERC20Like} from "@openzeppelin/contracts@5.1.0/token/ERC20/IER
 import {Structs} from "./Structs.sol";
 import {Storage} from "./Storage.sol";
 
-// A way to deposit any ERC20 compliant token
-// A way to deposit non-erc20 tokens especially the native tokens such as
-// ETH, BTC, Polkadot etc
-// A way to remove the tokens.
-// Storage of the state of balances
-
+/**
+ * @title CollateralManager
+ * @author Nzesi
+ * @notice Collateral deposit and withdrawal management for the DSCEngine.
+ * @dev Functions to deposit and withdraw ether and ERC20 tokens as collateral.
+ * @dev The contract uses a mapping to track the collateral balances of each user.
+ */
 contract CollateralManager is Storage {
 
+    /// Errors
     error CM__CollateralTokenNotApproved();
     error CM__ZeroAmountNotAllowed();
     error CM__AmountExceedsCurrentBalance(bytes32 collId, uint256 bal);
 
+    /// Events
     event CM__CollateralDeposited(bytes32 indexed collId, address indexed depositor, uint256 amount);
-
     event CM__CollateralWithdrawn(bytes32 indexed collId, address indexed user, uint256 amount);
 
+    /**
+     * @notice Allows the user to deposit ether as collateral.
+     * @dev Deposited ether amount is accessed via msg.value. Function is public and payable
+     * to allow users to send ether directly to the DSCEngine contract.
+     */
     function addEtherCollateral() public payable {
-        // cache ether deposit amount and depositor
         address depositor = msg.sender;
         uint256 depositAmount = msg.value;
         if (depositAmount == 0) revert CM__ZeroAmountNotAllowed();
@@ -32,37 +38,48 @@ contract CollateralManager is Storage {
         emit CM__CollateralDeposited("ETH", depositor, depositAmount);
     }
 
-    // Confirm if zero amount transfers are checked on the ERC20 contract side.-- found out that its
-    // not checked. Write tests for that confirmation before implementing the check here.
-    // User has to pre-approve DSCEngine contract prior to calling this function.
+    /**
+     * @notice Allows the user to deposit approved ERC20 tokens as collateral.
+     * @dev User must approve the DSCEngine contract to spend the specified
+     * amount of tokens before calling this function.
+     * @param collId The id of the collateral token.
+     * @param collAmt The amount of collateral tokens to deposit.
+     */
     function addCollateral(bytes32 collId, uint256 collAmt) internal {
         if (collAmt == 0) revert CM__ZeroAmountNotAllowed();
-        // Check collateral is allowed and get the address
+
+        // Check if the collateral is allowed and get its token address
         (bool allowed, address collTknAddr) = isAllowed(collId);
 
-        // Save gas by caching msg.sender
+        // Cache msg.sender to save gas
         address depositor = msg.sender;
 
-        // Has to be permitted
+        // Revert if the collateral is not allowed/approved.
         if (!allowed) {
             revert CM__CollateralTokenNotApproved();
         }
-        // ERC20 transfers
+        // Perform ERC20 transfer from the depositor to this contract
         else {
             bool success = ERC20Like(collTknAddr).transferFrom(depositor, address(this), collAmt);
             require(success, "Collateral Deposit Failed");
             s_collBalances[collId][depositor] += collAmt;
         }
+        // Emit deosit event
         emit CM__CollateralDeposited(collId, depositor, collAmt);
     }
 
+    /**
+     * @notice Allows the user to withdraw collateral from the protocol.
+     * @dev The user must have enough collateral to withdraw the specified amount.
+     * @dev The function checks if the collateral is ether or an ERC20 token and handles
+     * the withdrawal accordingly. A withdrawal event is emitted after the transfer.
+     * @param collId The id of the collateral token.
+     * @param amount The amount of collateral to withdraw.
+     */
     function removeCollateral(bytes32 collId, uint256 amount) public {
-        // CEI
-        // Ether removal
-        // They need to have enough to remove
-
-        //cache msg.sender
+        // Cache msg.sender to save gas
         address caller = msg.sender;
+
         if (amount == 0) revert CM__ZeroAmountNotAllowed();
         if (s_collBalances[collId][caller] < amount) {
             revert CM__AmountExceedsCurrentBalance(collId, s_collBalances[collId][caller]);
@@ -71,7 +88,9 @@ contract CollateralManager is Storage {
 
         emit CM__CollateralWithdrawn(collId, caller, amount);
 
-        // Ether withdrawal
+        // Check if the collateral is ether or an ERC20 token
+        // If it is ether, send the ether to the caller
+        // If it is an ERC20 token, transfer the tokens to the caller
         if (collId == "ETH") {
             (bool success,) = payable(caller).call{value: amount}("");
             require(success, "Ether Transfer Failed");
@@ -82,10 +101,18 @@ contract CollateralManager is Storage {
         }
     }
 
+    /**
+     * @notice Checks if the collateral is allowed and returns its address.
+     * @dev Check if a collateral with the given id is allowed in the protocol.
+     * @param collId The id of the collateral token.
+     * @return allowed true if the collateral is allowed, false otherwise.
+     * @return addr The address of the collateral token.
+     */
     function isAllowed(bytes32 collId) private view returns (bool allowed, address addr) {
         Structs.CollateralConfig memory config;
         config = s_collaterals[collId];
-        //check collateral settings have been authorized by governance.
+
+        // Check if the collateral is allowed
         if (config.tokenAddr == address(0)) {
             return (false, config.tokenAddr);
         } else {

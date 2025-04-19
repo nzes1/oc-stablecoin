@@ -1169,14 +1169,6 @@ contract DSCProtocolUnitTest is Test {
         } else {
             currentRate = startRate - ((timeElapsed * (startRate - endRate)) / rateDecayTime);
         }
-        // console.log("here12");
-        // The below expression overflows, breaking down into chunks using temp variables.
-        // currentRate = startRate - ((timeElapsed * (startRate - endRate)) / rateDecayTime);
-        // uint256 temp1 = timeElapsed * (startRate - endRate);
-        // uint256 temp2 = temp1 / rateDecayTime;
-        // console.log("here13");
-        // currentRate = startRate - temp2;
-        // console.log("here14");
         discount = (currentRate * dscAmt) / 1e18;
 
         return discount;
@@ -1640,7 +1632,6 @@ contract DSCProtocolUnitTest is Test {
 
         assertEq(engine.getUserCollateralBalance(link, liquidator), (linkAmt - penaltyInLINK - feesInLINK));
         assertEq(calculatedRewards, actualRewards);
-        console.log("calc", calculatedRewards);
     }
 
     function test_LiquidationOfDeeplyUnderwaterVaultTriggersBadDebtAbsorptionByProtocolAndEmits() public {

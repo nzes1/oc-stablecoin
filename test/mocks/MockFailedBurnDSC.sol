@@ -48,7 +48,15 @@ contract MockFailedBurnDSC is Ownable, ERC20Burnable, ERC20Permit {
         return true;
     }
 
-    function transferFrom(address, /*sender*/ address, /*recipient*/ uint256 /*amount*/) public pure override returns (bool)
+    function transferFrom(
+        address, /*sender*/
+        address, /*recipient*/
+        uint256 /*amount*/
+    )
+        public
+        pure
+        override
+        returns (bool)
     {
         return false;
     }
@@ -58,5 +66,9 @@ contract MockFailedBurnDSC is Ownable, ERC20Burnable, ERC20Permit {
     function burnFrom(address account, uint256 value) public override onlyOwner {
         super.burnFrom(account, value);
     }
+
+    // A recommencation from stackOverflow and foundry Github Issues to prevent coverage report from
+    // including a contract like mocks.
+    function test() public {}
 
 }

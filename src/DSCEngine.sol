@@ -333,16 +333,8 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         _redeemVaultCollateral(collId, collAmt);
     }
 
-    // no health check!!! --- problem because this is a public func--corrected
-    // but will burning ever break HF?
     function burnDSC(bytes32 collId, uint256 dscAmt) public {
         _burnDSC(collId, dscAmt, msg.sender, msg.sender);
-
-        // revert if burning breaks HF
-        (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
-        if (!healthy) {
-            revert DSCEngine__HealthFactorBelowThreshold(hf);
-        }
     }
 
     // morethanzero not needed here, is valid size already in mintDSC public one
