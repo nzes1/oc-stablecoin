@@ -107,14 +107,13 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
     /**
-     *
-     * @param dscToken The address of the DSC ERC20 token that uses the logic
-     * defined in this engine contract.
+     * @dev Initializes the DSCEngine with collateral configurations and the DSC token address.
+     * Registers supported collateral types and their configuration values and establishes the contract owner.
+     * @param configs Array of deployment configurations for each collateral type.
+     * @param dscToken Address of the DSC token used for minting and repayment.
      */
     constructor(Structs.DeploymentConfig[] memory configs, address dscToken) Ownable(msg.sender) {
-        // Initialize collateral configs
         for (uint256 k = 0; k < configs.length; k++) {
-            // call configure collateral
             configureCollateral(
                 configs[k].collId,
                 configs[k].tokenAddr,
@@ -132,15 +131,12 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice The function allows users to deposit collateral tokens and mint DSC tokens in
-     * a single transaction.
-     * @dev The user has to approve the transfer of the collateral tokens to this contract
-     * prior to initiating the deposit.
-     * @dev The amount the user deposits has to be more than zero. The token also has to be
-     * allowed as collateral. The function reverts otherwise.
-     * @param collId The address of the collateral token.
-     * @param collAmt The amount of collateral tokens to deposit.
-     * @param dscAmt The amount of DSC tokens to mint.
+     * @notice Deposits ERC20 collateral and mints DSC in a single transaction.
+     * @dev Requires prior token approval. Reverts if collateral amount is zero or unsupported.
+     * Ensures atomicity for vault creation and DSC issuance, enhancing user experience.
+     * @param collId The ID of the collateral token.
+     * @param collAmt The amount of collateral to deposit.
+     * @param dscAmt The amount of DSC to mint against the deposited collateral.
      */
     function depositCollateralAndMintDSC(
         bytes32 collId,
@@ -154,94 +150,113 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         _mintDSC(collId, collAmt, dscAmt);
     }
 
-    // need inheritance to avoid change of msg.sender
+    /**
+     * @notice Deposits Ether collateral and mints DSC in a single transaction.
+     * @dev Requires the caller to send Ether. Reverts if the amount is zero.
+     * Ensures atomicity for vault creation and DSC issuance, enhancing user experience.
+     * @param dscAmt The amount of DSC to mint against the deposited Ether collateral.
+     */
     function depositEtherCollateralAndMintDSC(uint256 dscAmt) external payable isValidDebtSize(dscAmt) {
         addEtherCollateral();
         _mintDSC("ETH", msg.value, dscAmt);
     }
 
+    /**
+     * @notice Redeems locked collateral by burning DSC in a single transaction.
+     * @dev Settles any protocol fees before redeeming. If full DSC debt is burned, the vault is considered closed,
+     * and the user receives all remaining locked collateral instead of the specified amount.
+     * @param collId The ID of the collateral token.
+     * @param collAmt The amount of collateral to redeem.
+     * @param dscAmt The amount of DSC to burn.
+     */
     function redeemCollateralForDSC(bytes32 collId, uint256 collAmt, uint256 dscAmt) external {
-        // begin by burning to reduce debt
-        // to avoid double check on hf, call directly the internal function.
         _burnDSC(collId, dscAmt, msg.sender, msg.sender);
 
-        // If all dsc on the vault was burned, then this is equivalence of vault closure.
-        // In such a case, the collateral to redeem will not be what the user specified but rather the
-        // available locked collateral since fees are collected from the locked amount
-        // Otherwise, user gets what they requested for.
         uint256 lockedBal = s_vaults[collId][msg.sender].lockedCollateral;
-
         uint256 actualRedeemAmt = min(lockedBal, collAmt);
 
-        // Then move the collateral specified, but only if hf is not broken
         redeemCollateral(collId, actualRedeemAmt);
     }
 
+    /**
+     * @notice Expands an existing vault by adding collateral and minting additional DSC.
+     * @dev Requires prior token approval and valid collateral. Reverts if inputs are invalid.
+     * Ensures atomic execution of collateral deposit and DSC minting for better UX.
+     * @param collId The ID of the collateral token.
+     * @param collAmt The amount of collateral to deposit.
+     * @param dscAmt The amount of DSC to mint.
+     */
     function expandVault(bytes32 collId, uint256 collAmt, uint256 dscAmt) external isValidDebtSize(dscAmt) {
         // deposit the collateral before topping up the vault
         depositCollateral(collId, collAmt);
         addToVault(collId, collAmt, dscAmt);
     }
 
+    /**
+     * @notice Expands an existing Ether vault by adding Ether collateral and minting additional DSC.
+     * @dev Requires the caller to send Ether. Reverts if the amount is zero.
+     * Ensures atomic execution of Ether deposit and DSC minting for better UX.
+     * @param dscAmt The amount of DSC to mint against the deposited Ether collateral.
+     */
     function expandETHVault(uint256 dscAmt) external payable isValidDebtSize(dscAmt) {
         addEtherCollateral();
         addToVault("ETH", msg.value, dscAmt);
     }
 
+    /**
+     * @dev Handles internal logic for adding collateral and minting DSC after deposit.
+     * Collects accrued protocol fees, updates global and vault-level accounting, and ensures vault health.
+     * @param collId The ID of the collateral token.
+     * @param collAmt The amount of collateral to deposit.
+     * @param dscAmt The amount of DSC to mint.
+     */
     function addToVault(bytes32 collId, uint256 collAmt, uint256 dscAmt) internal {
-        // to top -up debt, the accumulated fees has to be collected first.
-        // then top-up the debt together with backing collateral
-
-        // collect accumulated fees
         settleProtocolFees(collId, msg.sender, s_vaults[collId][msg.sender].dscDebt);
 
-        // accounting updates
         s_collBalances[collId][msg.sender] -= collAmt;
-
         s_vaults[collId][msg.sender].lockedCollateral += collAmt;
         s_vaults[collId][msg.sender].dscDebt += dscAmt;
         s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
 
-        //HF of vault has to remain healthy
-
         (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
-
         if (!healthy) {
             revert DSCEngine__HealthFactorBelowThreshold(hf);
         }
 
-        // otherwise it is healthy so mint actual dsc to user
-        // Mint DSC to user address
         bool mintStatus = i_DSC.mint(msg.sender, dscAmt);
-
         if (!mintStatus) {
             revert DSCEngine__MintingDSCFailed();
         }
-        //emit
+
         emit DscMinted(msg.sender, dscAmt);
     }
 
+    /**
+     * @notice Flags a vault as underwater and optionally initiates liquidation.
+     * @dev Intended for use by governance or keeper bots. Can be used to only mark or both mark and liquidate.
+     * @param collId The ID of the vault collateral token.
+     * @param owner The address of the vault owner.
+     * @param liquidate Whether to proceed with liquidation immediately.
+     * @param dsc The amount of DSC to repay if liquidating.
+     * @param withdraw Whether to withdraw the proceeds of liquidation from the protocol or not. This flexibility gives
+     * liquidators the option to keep the collateral within the protocol for future use such as opening new vaults
+     * themselves.
+     */
     function markVaultAsUnderwater(
         bytes32 collId,
         address owner,
         bool liquidate,
-        /// UI will have a flow such that a true here introduces the other 2
         uint256 dsc,
         bool withdraw
     )
         external
     {
-        // check for underwater status and mark it
         bool liquidatable = vaultIsUnderwater(collId, owner);
-
-        // If liquidatable and user had marked to liquidate, then do so
         if (liquidatable) {
             if (liquidate) {
                 liquidateVault(collId, owner, dsc, withdraw);
             }
-        }
-        // Otherwise vault is not liquidatable
-        else {
+        } else {
             revert DSCEngine__VaultNotUnderwater();
         }
     }
@@ -266,10 +281,10 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         _burnDSC(collId, dscToRepay, owner, liquidator);
 
         // Get the collateral tokens equivalent of the rewards
-        uint256 liquidatorTokens = getTokenAmountFromUsdValue2(collId, liquidatorRewardsUsd);
+        uint256 liquidatorTokens = getTokenAmountFromUsdValue(collId, liquidatorRewardsUsd);
 
         // Base collateral liquidator should receive without rewards
-        uint256 baseCollateral = getTokenAmountFromUsdValue2(collId, dscToRepay);
+        uint256 baseCollateral = getTokenAmountFromUsdValue(collId, dscToRepay);
 
         uint256 totalPayout = baseCollateral + liquidatorTokens;
 
@@ -404,7 +419,7 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         uint256 accumulatedFees = calculateProtocolFee(debt, deltaTime);
 
         // Equivalence of these fees in collateral form
-        uint256 feeTokenAmount = getTokenAmountFromUsdValue2(collId, accumulatedFees);
+        uint256 feeTokenAmount = getTokenAmountFromUsdValue(collId, accumulatedFees);
 
         // collateral being charged is already in the engine. Its just a matter of
         // updating the balances treasury appropriately
@@ -433,7 +448,7 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
     function settleLiquidationPenalty(bytes32 collId, address owner, uint256 debt) internal {
         uint256 penalty = calculateLiquidationPenalty(debt);
 
-        uint256 penaltyTokenAmount = getTokenAmountFromUsdValue2(collId, penalty);
+        uint256 penaltyTokenAmount = getTokenAmountFromUsdValue(collId, penalty);
 
         s_vaults[collId][owner].lockedCollateral -= penaltyTokenAmount;
 

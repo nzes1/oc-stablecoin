@@ -431,7 +431,7 @@ contract DSCProtocolUnitTest is Test {
         MockV3Aggregator(engine.getCollateralSettings(weth).priceFeed).updateAnswer(201635e6);
 
         uint256 nineMonthsFeesInWeth =
-            engine.getTokenAmountFromUsdValue2(weth, engine.calculateFees(dscFirstMint, nineMonths));
+            engine.getTokenAmountFromUsdValue(weth, engine.calculateFees(dscFirstMint, nineMonths));
 
         vm.startPrank(TEST_USER_1);
         // First pre-approve engine before expanding the vault
@@ -479,7 +479,7 @@ contract DSCProtocolUnitTest is Test {
         vm.stopPrank();
 
         uint256 sixMonthsFeesInEth =
-            engine.getTokenAmountFromUsdValue2(eth, engine.calculateFees(dscFirstMint, sixMonths));
+            engine.getTokenAmountFromUsdValue(eth, engine.calculateFees(dscFirstMint, sixMonths));
 
         (uint256 finalColl, uint256 finalDebt) = engine.getVaultInformation(eth, TEST_USER_1);
 
@@ -855,7 +855,7 @@ contract DSCProtocolUnitTest is Test {
 
         // Burn should succeed
         (uint256 linkAfter, uint256 debtAfter) = engine.getVaultInformation(link, TEST_USER_1);
-        uint256 feesInLink = engine.getTokenAmountFromUsdValue2(link, calculatedFees);
+        uint256 feesInLink = engine.getTokenAmountFromUsdValue(link, calculatedFees);
         uint256 linkEnd = dsc.balanceOf(TEST_USER_1);
 
         assertEq(expectedFees, calculatedFees);
@@ -893,7 +893,7 @@ contract DSCProtocolUnitTest is Test {
         // Combined the raw fees in USD and the actual tokens into one call as two
         // local variables were causing the infamous `stack too deep error`
         // uint256 feesUsd = engine.calculateFees(dscAmt, nineMonths);
-        uint256 feesInLinkTokens = engine.getTokenAmountFromUsdValue2(link, (engine.calculateFees(dscAmt, nineMonths)));
+        uint256 feesInLinkTokens = engine.getTokenAmountFromUsdValue(link, (engine.calculateFees(dscAmt, nineMonths)));
 
         (uint256 lockedBal, uint256 debt) = engine.getVaultInformation(link, TEST_USER_1);
         uint256 endLinkBal = ERC20Like(linkToken).balanceOf(TEST_USER_1);
@@ -945,7 +945,7 @@ contract DSCProtocolUnitTest is Test {
         vm.stopPrank();
 
         (uint256 lockedBal, uint256 debt) = engine.getVaultInformation(link, TEST_USER_1);
-        uint256 feesInLinkTokens = engine.getTokenAmountFromUsdValue2(link, (engine.calculateFees(burnDsc, nineMonths)));
+        uint256 feesInLinkTokens = engine.getTokenAmountFromUsdValue(link, (engine.calculateFees(burnDsc, nineMonths)));
         uint256 endLinkBal = ERC20Like(linkToken).balanceOf(TEST_USER_1);
 
         assertEq(endLinkBal, startLinkBal + collToRedeem);
@@ -1149,7 +1149,7 @@ contract DSCProtocolUnitTest is Test {
         uint256 totalUsdRewards = discountUsd + rewardBasedOnSizeUsd;
 
         // rewards expressed in the backing vault collateral
-        uint256 tokenRewards = engine.getTokenAmountFromUsdValue2(collId, totalUsdRewards);
+        uint256 tokenRewards = engine.getTokenAmountFromUsdValue(collId, totalUsdRewards);
 
         return tokenRewards;
     }
@@ -1251,14 +1251,14 @@ contract DSCProtocolUnitTest is Test {
         // Arrange - check the expected & actual rewards before vault is liquidated
         uint256 calculatedRewards = _computeRewards(weth, TEST_USER_1, underwaterTime);
         uint256 actualRewardsUsd = engine.calculateLiquidationRewards(weth, TEST_USER_1);
-        uint256 actualRewards = engine.getTokenAmountFromUsdValue2(weth, actualRewardsUsd);
+        uint256 actualRewards = engine.getTokenAmountFromUsdValue(weth, actualRewardsUsd);
 
         vm.startPrank(liquidator);
         engine.markVaultAsUnderwater(weth, TEST_USER_1, true, liquidationAmt, false);
         vm.stopPrank();
 
         // Liquidator did not withdraw the liquidation outputs from protocol
-        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue2(weth, liquidationAmt));
+        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue(weth, liquidationAmt));
 
         assertEq(calculatedRewards, actualRewards);
         assertEq(engine.getUserCollateralBalance(weth, liquidator), liquidatorWethBal);
@@ -1313,7 +1313,7 @@ contract DSCProtocolUnitTest is Test {
         // Notice that 30 minutes have elapsed so far
         uint256 calculatedRewards = _computeRewards(link, TEST_USER_1, underwaterTime);
         uint256 actualRewardsUsd = engine.calculateLiquidationRewards(link, TEST_USER_1);
-        uint256 actualRewards = engine.getTokenAmountFromUsdValue2(link, actualRewardsUsd);
+        uint256 actualRewards = engine.getTokenAmountFromUsdValue(link, actualRewardsUsd);
 
         // Liquidator tries to mark and liquidate in a single call.
         // Since the keeper had already marked the vault as underwater earlier,
@@ -1345,7 +1345,7 @@ contract DSCProtocolUnitTest is Test {
         vm.stopPrank();
 
         // Liquidator did not withdraw the liquidation outputs from protocol
-        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue2(link, liquidationAmt));
+        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue(link, liquidationAmt));
 
         assertEq(calculatedRewards, actualRewards);
         assertEq(engine.getUserCollateralBalance(link, liquidator), liquidatorWethBal);
@@ -1401,7 +1401,7 @@ contract DSCProtocolUnitTest is Test {
         // Notice that 2 hours have elapsed so far
         uint256 calculatedRewards = _computeRewards(dai, TEST_USER_1, underwaterTime);
         uint256 actualRewardsUsd = engine.calculateLiquidationRewards(dai, TEST_USER_1);
-        uint256 actualRewards = engine.getTokenAmountFromUsdValue2(dai, actualRewardsUsd);
+        uint256 actualRewards = engine.getTokenAmountFromUsdValue(dai, actualRewardsUsd);
 
         // Liquidator tries to mark and liquidate in a single call.
         // Since the keeper had already marked the vault as underwater earlier,
@@ -1433,7 +1433,7 @@ contract DSCProtocolUnitTest is Test {
         vm.stopPrank();
 
         // Liquidator did not withdraw the liquidation outputs from protocol
-        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue2(dai, liquidationAmt));
+        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue(dai, liquidationAmt));
 
         assertEq(calculatedRewards, actualRewards);
         assertEq(engine.getUserCollateralBalance(dai, liquidator), liquidatorWethBal);
@@ -1489,7 +1489,7 @@ contract DSCProtocolUnitTest is Test {
         // Notice that 43 minutes have elapsed so far
         uint256 calculatedRewards = _computeRewards(usdt, TEST_USER_1, underwaterTime);
         uint256 actualRewardsUsd = engine.calculateLiquidationRewards(usdt, TEST_USER_1);
-        uint256 actualRewards = engine.getTokenAmountFromUsdValue2(usdt, actualRewardsUsd);
+        uint256 actualRewards = engine.getTokenAmountFromUsdValue(usdt, actualRewardsUsd);
 
         // Liquidator tries to mark and liquidate in a single call.
         // Since the keeper had already marked the vault as underwater earlier,
@@ -1525,7 +1525,7 @@ contract DSCProtocolUnitTest is Test {
         vm.stopPrank();
 
         // Liquidator did not withdraw the liquidation outputs from protocol
-        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue2(usdt, liquidationAmt));
+        uint256 liquidatorWethBal = calculatedRewards + (engine.getTokenAmountFromUsdValue(usdt, liquidationAmt));
 
         assertEq(calculatedRewards, actualRewards);
         assertEq(engine.getUserCollateralBalance(usdt, liquidator), liquidatorWethBal);
@@ -1578,7 +1578,7 @@ contract DSCProtocolUnitTest is Test {
         // Notice that 5 minutes have elapsed so far
         uint256 calculatedRewards = _computeRewards(link, TEST_USER_1, underwaterTime);
         uint256 actualRewards =
-            engine.getTokenAmountFromUsdValue2(link, (engine.calculateLiquidationRewards(link, TEST_USER_1)));
+            engine.getTokenAmountFromUsdValue(link, (engine.calculateLiquidationRewards(link, TEST_USER_1)));
 
         // Liquidator tries to mark and liquidate in a single call.
         // Since the keeper had already marked the vault as underwater earlier,
@@ -1622,13 +1622,13 @@ contract DSCProtocolUnitTest is Test {
         // Liquidator did not withdraw the liquidation outputs from protocol
         // But got all the remainder after fees and liquidation penalty was taken from the 1m LINK
         // 1% liquidation penalty
-        uint256 penaltyInLINK = engine.getTokenAmountFromUsdValue2(link, ((dscAmt * 1e16) / 1e18));
+        uint256 penaltyInLINK = engine.getTokenAmountFromUsdValue(link, ((dscAmt * 1e16) / 1e18));
 
         // Fees for having the vault for 2 days and 5 minutes - 2885 minutes
         // APR is 1% annual fee
         // fee formula = (debt * APR * deltaTime) / (SECONDS_IN_YEAR * PRECISION);
         uint256 feesInLINK =
-            engine.getTokenAmountFromUsdValue2(link, ((dscAmt * 1e16 * 2885 minutes) / (365 days * 1e18)));
+            engine.getTokenAmountFromUsdValue(link, ((dscAmt * 1e16 * 2885 minutes) / (365 days * 1e18)));
 
         assertEq(engine.getUserCollateralBalance(link, liquidator), (linkAmt - penaltyInLINK - feesInLINK));
         assertEq(calculatedRewards, actualRewards);
@@ -1723,7 +1723,7 @@ contract DSCProtocolUnitTest is Test {
         engine.markVaultAsUnderwater(link, TEST_USER_1, true, dscAmt, false);
         vm.stopPrank();
 
-        uint256 expectedOutput = calculatedRewards + (engine.getTokenAmountFromUsdValue2(link, dscAmt));
+        uint256 expectedOutput = calculatedRewards + (engine.getTokenAmountFromUsdValue(link, dscAmt));
         uint256 liquidatorDscAfter = ERC20Like(address(dsc)).balanceOf(liquidator);
 
         assertGt(expectedOutput, linkAmt);

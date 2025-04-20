@@ -201,7 +201,7 @@ contract Liquidations is Storage, VaultManager {
      * @notice Calculates the liquidation reward for high-risk collateral.
      * @dev The reward is calculated as 1.5% of the DSC debt size, with a minimum
      * of 10 DSC and a maximum of 5000 DSC. This incentivizes liquidators to prioritize
-     * high-risk vaults over low-risk ones. The reward is capped to prevent laiquidators
+     * high-risk vaults over low-risk ones. The reward is capped to prevent liquidators
      * from receiving excessive rewards on large vaults, and the minimum reward ensures liquidators
      * are incentivized even for smaller debts.
      * @param dscDebt The amount of DSC debt for the vault.

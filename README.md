@@ -287,7 +287,7 @@ liq_penalty = (debt * LIQ_PENALTY) / 1e18
       precision on reward calculations -- check
       
 
-
+    ////LIQUIDATIONS
     // only take debt value + penalty + any fees then return excess to owner
     // decreasing discount on collateral - this way liquidators are incentivized to act quickly.
     // To avoid liquidators not willing to liquidate small loans - perhaps due to high
@@ -297,6 +297,22 @@ liq_penalty = (debt * LIQ_PENALTY) / 1e18
     // at least do loan, or loan + fees or loan + penalty or all of them. maybe greater of
     // either loan + fees or loan + penalty -- whichever is available.
     // To avoid price impacts of large loans - supplyCap needs to be introduced.
+
+
+    ///// vault is HEALTHY
+    // HF = ratio of trusted/ backing coll to debt
+        // Needs to be more than minHF which is always 1e18 - the assumption here is that
+        // the ratio of the collateral that the protocol considers as the safety margin or rather
+        // cover of loan is the maximum you can mint dsc. this value will yield a ratio of 1 and
+        // any amounts greater than this max amount breaks the ratio below 1. Minting less than the
+        // max dsc for the locked collateral means hf is above 1 hence healthy.
+        // both have 18 decimals i.e. the coll in usd and DSC
+        // To maintain the decimals for the health factor, then the result needs to be
+        // scaled up with 18 decimals. The ratio automatically  removes the decimals.
+        // SO scaling result up is like (vaultCollBalUsd / vaultDebt) * 18decimals.
+        // But it's always recommended to do multiplication before division so that you
+        // don't lose precision due to division.
+        // so that changes to (vaultCollBalUsd * 18decimals / vaultDebt)
 
 
 0 ETH
