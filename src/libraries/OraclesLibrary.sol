@@ -4,15 +4,13 @@ pragma solidity 0.8.24;
 
 import {AggregatorV3Interface} from "@chainlink/contracts@v1.3.0/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
-/*
- * @dev This contract is used to check the staleness of Chainlink price feeds.
- * @dev The contract uses the Chainlink AggregatorV3Interface to get the latest round data.
- * @dev The contract checks if the latest round data is stale by comparing the updatedAt timestamp
- * @dev with the current block timestamp. If the difference is greater than 2 hours, the contract
- * @dev reverts with an error.
- * @2dev 2 hours was selected because chainlink price feeds for BTC/USD and ETH/USD are
- * @dev updated every 1 hour. This means that if the price feed was last updated 2 hours ago,
- * @dev it is stale. This was part of learning the best practices for using Chainlink price feeds.
+/**
+ * @dev Library for validating the freshness of Chainlink price feeds.
+ * Utilizes AggregatorV3Interface to fetch the latest round data and
+ * determines staleness based on the updatedAt timestamp.
+ * Reverts if the price feed is older than 2 hours, indicating staleness.
+ * A 2-hour threshold is chosen based on the typical 1-hour update cycle
+ * of Chainlink BTC/USD and ETH/USD feeds.
  */
 library OraclesLibrary {
 
@@ -21,13 +19,13 @@ library OraclesLibrary {
     error OraclesLibrary__StalePriceFeed();
 
     /**
-     * @notice Checks if the latest round data is stale.
-     * @param _priceFeed The address of the Chainlink price feed.
-     * @return roundId The round ID of the latest round.
-     * @return answer The answer of the latest round.
-     * @return startedAt The timestamp when the latest round started.
-     * @return updatedAt The timestamp when the latest round was updated.
-     * @return answeredInRound The round ID of the round that answered the latest round.
+     * @notice Verifies the freshness of the latest Chainlink price feed data.
+     * @param _priceFeed The address of the Chainlink AggregatorV3Interface contract.
+     * @return roundId The ID of the latest data round.
+     * @return answer The reported price from the latest round.
+     * @return startedAt Timestamp when the round was initiated.
+     * @return updatedAt Timestamp when the round was last updated.
+     * @return answeredInRound The round ID in which the answer was finalized.
      */
     function latestRoundDataStalenessCheck(AggregatorV3Interface _priceFeed)
         public

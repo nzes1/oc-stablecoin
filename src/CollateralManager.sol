@@ -9,110 +9,95 @@ import {Storage} from "./Storage.sol";
 /**
  * @title CollateralManager
  * @author Nzesi
- * @notice Collateral deposit and withdrawal management for the DSCEngine.
- * @dev Functions to deposit and withdraw ether and ERC20 tokens as collateral.
- * @dev The contract uses a mapping to track the collateral balances of each user.
+ * @notice Manages collateral deposits and withdrawals for the DSCEngine protocol.
+ * @dev Supports handling of both native Ether and ERC20 token collateral.
+ * @dev Tracks individual user collateral balances and enforces protocol collateral logic.
  */
 contract CollateralManager is Storage {
 
-    /// Errors
+    event CM__CollateralDeposited(bytes32 indexed collId, address indexed depositor, uint256 amount);
+    event CM__CollateralWithdrawn(bytes32 indexed collId, address indexed user, uint256 amount);
+
     error CM__CollateralTokenNotApproved();
     error CM__ZeroAmountNotAllowed();
     error CM__AmountExceedsCurrentBalance(bytes32 collId, uint256 bal);
 
-    /// Events
-    event CM__CollateralDeposited(bytes32 indexed collId, address indexed depositor, uint256 amount);
-    event CM__CollateralWithdrawn(bytes32 indexed collId, address indexed user, uint256 amount);
-
     /**
-     * @notice Allows the user to deposit ether as collateral.
-     * @dev Deposited ether amount is accessed via msg.value. Function is public and payable
-     * to allow users to send ether directly to the DSCEngine contract.
+     * @notice Deposits Ether into the protocol as collateral for the sender.
+     * @dev Accepts Ether via msg.value and updates the sender's collateral balance.
+     * @dev The function is payable and public to enable direct Ether transfers.
      */
     function addEtherCollateral() public payable {
         address depositor = msg.sender;
         uint256 depositAmount = msg.value;
         if (depositAmount == 0) revert CM__ZeroAmountNotAllowed();
         s_collBalances["ETH"][depositor] += depositAmount;
-
         emit CM__CollateralDeposited("ETH", depositor, depositAmount);
     }
 
     /**
-     * @notice Allows the user to deposit approved ERC20 tokens as collateral.
-     * @dev User must approve the DSCEngine contract to spend the specified
-     * amount of tokens before calling this function.
-     * @param collId The id of the collateral token.
-     * @param collAmt The amount of collateral tokens to deposit.
+     * @notice Deposits approved ERC20 tokens into the protocol as collateral.
+     * @dev The user must approve the DSCEngine contract to spend the specified
+     * token amount before invoking this function.
+     * @param collId The identifier of the ERC20 collateral token.
+     * @param collAmt The amount of tokens to be deposited as collateral.
      */
     function addCollateral(bytes32 collId, uint256 collAmt) internal {
         if (collAmt == 0) revert CM__ZeroAmountNotAllowed();
 
-        // Check if the collateral is allowed and get its token address
+        address depositor = msg.sender;
         (bool allowed, address collTknAddr) = isAllowed(collId);
 
-        // Cache msg.sender to save gas
-        address depositor = msg.sender;
-
-        // Revert if the collateral is not allowed/approved.
         if (!allowed) {
             revert CM__CollateralTokenNotApproved();
-        }
-        // Perform ERC20 transfer from the depositor to this contract
-        else {
+        } else {
             bool success = ERC20Like(collTknAddr).transferFrom(depositor, address(this), collAmt);
             require(success, "Collateral Deposit Failed");
             s_collBalances[collId][depositor] += collAmt;
         }
-        // Emit deosit event
+
         emit CM__CollateralDeposited(collId, depositor, collAmt);
     }
 
     /**
-     * @notice Allows the user to withdraw collateral from the protocol.
-     * @dev The user must have enough collateral to withdraw the specified amount.
-     * @dev The function checks if the collateral is ether or an ERC20 token and handles
-     * the withdrawal accordingly. A withdrawal event is emitted after the transfer.
-     * @param collId The id of the collateral token.
+     * @notice Withdraws a specified amount of collateral from the protocol.
+     * @dev Requires the user to have sufficient collateral balance. Determines
+     * if the collateral is Ether or ERC20 and processes the withdrawal accordingly.
+     * @dev Emits a withdrawal event upon successful transfer.
+     * @param collId The identifier of the collateral token.
      * @param amount The amount of collateral to withdraw.
      */
     function removeCollateral(bytes32 collId, uint256 amount) public {
-        // Cache msg.sender to save gas
-        address caller = msg.sender;
-
         if (amount == 0) revert CM__ZeroAmountNotAllowed();
+
+        address caller = msg.sender;
         if (s_collBalances[collId][caller] < amount) {
             revert CM__AmountExceedsCurrentBalance(collId, s_collBalances[collId][caller]);
         }
+
         s_collBalances[collId][caller] -= amount;
 
         emit CM__CollateralWithdrawn(collId, caller, amount);
 
-        // Check if the collateral is ether or an ERC20 token
-        // If it is ether, send the ether to the caller
-        // If it is an ERC20 token, transfer the tokens to the caller
         if (collId == "ETH") {
             (bool success,) = payable(caller).call{value: amount}("");
             require(success, "Ether Transfer Failed");
         } else {
-            // Get the address of this collateral
             address addr = s_collaterals[collId].tokenAddr;
             ERC20Like(addr).transfer(caller, amount);
         }
     }
 
     /**
-     * @notice Checks if the collateral is allowed and returns its address.
-     * @dev Check if a collateral with the given id is allowed in the protocol.
-     * @param collId The id of the collateral token.
-     * @return allowed true if the collateral is allowed, false otherwise.
-     * @return addr The address of the collateral token.
+     * @notice Determines if a collateral token is allowed in the protocol.
+     * @dev Looks up the collateral by its ID and verifies its approval status.
+     * @param collId The identifier of the collateral token.
+     * @return allowed True if the collateral is approved, false otherwise.
+     * @return addr The address of the collateral token contract.
      */
     function isAllowed(bytes32 collId) private view returns (bool allowed, address addr) {
-        Structs.CollateralConfig memory config;
-        config = s_collaterals[collId];
+        Structs.CollateralConfig memory config = s_collaterals[collId];
 
-        // Check if the collateral is allowed
         if (config.tokenAddr == address(0)) {
             return (false, config.tokenAddr);
         } else {

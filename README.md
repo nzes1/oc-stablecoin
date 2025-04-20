@@ -286,7 +286,18 @@ liq_penalty = (debt * LIQ_PENALTY) / 1e18
       reward based on size --check
       precision on reward calculations -- check
       
-   
+
+
+    // only take debt value + penalty + any fees then return excess to owner
+    // decreasing discount on collateral - this way liquidators are incentivized to act quickly.
+    // To avoid liquidators not willing to liquidate small loans - perhaps due to high
+    // gas costs which are justifiable by the profit they will make, then I will implement
+    // minimum loan requirements so that underwater vaults are always liquidatable
+    // At the minimum, pay the dsc loan. if not loan + penalty + fees; when the 3 cannot be fulfilled
+    // at least do loan, or loan + fees or loan + penalty or all of them. maybe greater of
+    // either loan + fees or loan + penalty -- whichever is available.
+    // To avoid price impacts of large loans - supplyCap needs to be introduced.
+
 
 0 ETH
 1 WETH

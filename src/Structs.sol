@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 
 pragma solidity 0.8.24;
+/**
+ * @title Structs
+ * @author Nzesi
+ * @notice Structs used in the DSC protocol
+ */
 
 library Structs {
 
