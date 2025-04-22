@@ -15,13 +15,22 @@ import {Storage} from "./Storage.sol";
  */
 contract CollateralManager is Storage {
 
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
     event CM__CollateralDeposited(bytes32 indexed collId, address indexed depositor, uint256 amount);
     event CM__CollateralWithdrawn(bytes32 indexed collId, address indexed user, uint256 amount);
 
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
     error CM__CollateralTokenNotApproved();
     error CM__ZeroAmountNotAllowed();
     error CM__AmountExceedsCurrentBalance(bytes32 collId, uint256 bal);
 
+    /*//////////////////////////////////////////////////////////////
+                            PUBLIC FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
     /**
      * @notice Deposits Ether into the protocol as collateral for the sender.
      * @dev Accepts Ether via msg.value and updates the sender's collateral balance.
@@ -33,30 +42,6 @@ contract CollateralManager is Storage {
         if (depositAmount == 0) revert CM__ZeroAmountNotAllowed();
         s_collBalances["ETH"][depositor] += depositAmount;
         emit CM__CollateralDeposited("ETH", depositor, depositAmount);
-    }
-
-    /**
-     * @notice Deposits approved ERC20 tokens into the protocol as collateral.
-     * @dev The user must approve the DSCEngine contract to spend the specified
-     * token amount before invoking this function.
-     * @param collId The identifier of the ERC20 collateral token.
-     * @param collAmt The amount of tokens to be deposited as collateral.
-     */
-    function addCollateral(bytes32 collId, uint256 collAmt) internal {
-        if (collAmt == 0) revert CM__ZeroAmountNotAllowed();
-
-        address depositor = msg.sender;
-        (bool allowed, address collTknAddr) = isAllowed(collId);
-
-        if (!allowed) {
-            revert CM__CollateralTokenNotApproved();
-        } else {
-            bool success = ERC20Like(collTknAddr).transferFrom(depositor, address(this), collAmt);
-            require(success, "Collateral Deposit Failed");
-            s_collBalances[collId][depositor] += collAmt;
-        }
-
-        emit CM__CollateralDeposited(collId, depositor, collAmt);
     }
 
     /**
@@ -88,6 +73,36 @@ contract CollateralManager is Storage {
         }
     }
 
+    /*//////////////////////////////////////////////////////////////
+                           INTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+    /**
+     * @notice Deposits approved ERC20 tokens into the protocol as collateral.
+     * @dev The user must approve the DSCEngine contract to spend the specified
+     * token amount before invoking this function.
+     * @param collId The identifier of the ERC20 collateral token.
+     * @param collAmt The amount of tokens to be deposited as collateral.
+     */
+    function addCollateral(bytes32 collId, uint256 collAmt) internal {
+        if (collAmt == 0) revert CM__ZeroAmountNotAllowed();
+
+        address depositor = msg.sender;
+        (bool allowed, address collTknAddr) = isAllowed(collId);
+
+        if (!allowed) {
+            revert CM__CollateralTokenNotApproved();
+        } else {
+            bool success = ERC20Like(collTknAddr).transferFrom(depositor, address(this), collAmt);
+            require(success, "Collateral Deposit Failed");
+            s_collBalances[collId][depositor] += collAmt;
+        }
+
+        emit CM__CollateralDeposited(collId, depositor, collAmt);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           PRIVATE FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
     /**
      * @notice Determines if a collateral token is allowed in the protocol.
      * @dev Looks up the collateral by its ID and verifies its approval status.

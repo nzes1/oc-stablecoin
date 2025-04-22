@@ -25,6 +25,29 @@ contract Liquidations is Storage, VaultManager {
     error LM__SuppliedDscNotEnoughToRepayBadDebt();
 
     /**
+     * @notice Calculates the liquidation rewards for a liquidator based on vault details.
+     * @dev Rewards are calculated in DSC and are based on the size of the debt and the speed
+     * of liquidation. A time-decaying discount is applied based on how long the vault has been
+     * underwater. The final rewards are returned in DSC, which is pegged to USD and will be
+     * converted to collateral amount for transfer in the DSCEngine.
+     * @param collId The ID of the vault collateral type.
+     * @param owner The address of the vault owner.
+     * @return rewards The total liquidation rewards in USD.
+     */
+    function calculateLiquidationRewards(bytes32 collId, address owner) public view returns (uint256 rewards) {
+        uint256 totalRewards;
+        (, uint256 dscDebt) = vaultDetails(collId, owner);
+        uint256 underwaterStartTime = firstUnderwaterTime[collId][owner];
+
+        uint256 discount = liquidationDiscountDecay(underwaterStartTime, dscDebt);
+        uint256 rewardBasedOnDebtSize = calculateRewardBasedOnDebtSize(collId, dscDebt);
+
+        totalRewards = discount + rewardBasedOnDebtSize;
+
+        return totalRewards;
+    }
+
+    /**
      * @notice Checks whether a vault is undercollateralized and flags it for liquidation.
      * @dev If the vault is undercollateralized, the function stores the current
      * timestamp as the time it was marked underwater. This timestamp is used
@@ -76,29 +99,6 @@ contract Liquidations is Storage, VaultManager {
     }
 
     /**
-     * @notice Calculates the liquidation rewards for a liquidator based on vault details.
-     * @dev Rewards are calculated in DSC and are based on the size of the debt and the speed
-     * of liquidation. A time-decaying discount is applied based on how long the vault has been
-     * underwater. The final rewards are returned in DSC, which is pegged to USD and will be
-     * converted to collateral amount for transfer in the DSCEngine.
-     * @param collId The ID of the vault collateral type.
-     * @param owner The address of the vault owner.
-     * @return rewards The total liquidation rewards in USD.
-     */
-    function calculateLiquidationRewards(bytes32 collId, address owner) public view returns (uint256 rewards) {
-        uint256 totalRewards;
-        (, uint256 dscDebt) = vaultDetails(collId, owner);
-        uint256 underwaterStartTime = firstUnderwaterTime[collId][owner];
-
-        uint256 discount = liquidationDiscountDecay(underwaterStartTime, dscDebt);
-        uint256 rewardBasedOnDebtSize = calculateRewardBasedOnDebtSize(collId, dscDebt);
-
-        totalRewards = discount + rewardBasedOnDebtSize;
-
-        return totalRewards;
-    }
-
-    /**
      * @notice Calculates the liquidation discount based on the time the vault has been underwater.
      * @dev The discount is applied as a percentage of the DSC debt. The longer the vault remains
      * underwater, the lower the discount, incentivizing quicker liquidations.
@@ -135,6 +135,20 @@ contract Liquidations is Storage, VaultManager {
         } else {
             return calculateRewardForHighRiskCollateral(dscDebtSize);
         }
+    }
+
+    /**
+     * @dev Returns the minimum of two values.
+     */
+    function min(uint256 a, uint256 b) internal pure returns (uint256) {
+        return (a < b ? a : b);
+    }
+
+    /**
+     * @dev Returns the maximum of two values.
+     */
+    function max(uint256 a, uint256 b) internal pure returns (uint256) {
+        return (a > b ? a : b);
     }
 
     /**
@@ -213,20 +227,6 @@ contract Liquidations is Storage, VaultManager {
         reward = min(max(computedReward, LIQ_MIN_REWARD), LIQ_MAX_REWARD);
 
         return reward;
-    }
-
-    /**
-     * @dev Returns the minimum of two values.
-     */
-    function min(uint256 a, uint256 b) internal pure returns (uint256) {
-        return (a < b ? a : b);
-    }
-
-    /**
-     * @dev Returns the maximum of two values.
-     */
-    function max(uint256 a, uint256 b) internal pure returns (uint256) {
-        return (a > b ? a : b);
     }
 
 }

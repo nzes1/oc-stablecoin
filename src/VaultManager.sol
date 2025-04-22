@@ -8,7 +8,6 @@ import {OraclesLibrary} from "./libraries/OraclesLibrary.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts@v1.3.0/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {IERC20 as ERC20Like} from "@openzeppelin/contracts@5.1.0/token/ERC20/IERC20.sol";
 
-import {console} from "forge-std/console.sol";
 /**
  * @title VaultManager
  * @author Nzesi
@@ -25,10 +24,13 @@ import {console} from "forge-std/console.sol";
  * - Evaluating vault health based on collateral-to-debt ratio
  * - Providing pricing and value conversion helpers
  */
-
 contract VaultManager is Storage {
 
     using OraclesLibrary for AggregatorV3Interface;
+
+    /*//////////////////////////////////////////////////////////////
+                           EXTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
 
     /**
      * @notice Increases the locked collateral in an existing vault.
@@ -41,6 +43,74 @@ contract VaultManager is Storage {
 
         s_vaults[collId][msg.sender].lockedCollateral += collAmt;
     }
+
+    /*//////////////////////////////////////////////////////////////
+                            PUBLIC FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Calculates the USD value of the collateral locked in a vault.
+     * @dev Fetches the current collateral price from the Chainlink price feed, scales it to 18 decimals,
+     * and returns the value in USD. This value is essential for determining the Health Factor ratio and
+     * the amount of DSC that can be minted against the collateral - the reason for scaling to 18 decimals.
+     * @param collId The ID of the collateral type.
+     * @param owner The address of the vault owner.
+     * @return usdValue The USD value of the locked collateral, scaled to 18 decimals.
+     */
+    function getVaultCollateralUsdValue(bytes32 collId, address owner) public returns (uint256 usdValue) {
+        uint256 vaultBal;
+        uint256 rawUsdValue;
+        uint256 scaledUpUsdValue;
+
+        vaultBal = s_vaults[collId][owner].lockedCollateral;
+        rawUsdValue = getRawUsdValue(collId, vaultBal);
+        scaledUpUsdValue = scaleUsdValueToDSCDecimals(collId, rawUsdValue);
+
+        return scaledUpUsdValue;
+    }
+
+    /**
+     * @notice Converts a USD value to the equivalent amount of collateral tokens.
+     * @dev Uses the collateral's price and decimal precision to compute the token amount
+     * that corresponds to the given USD value. Price is scaled to 18 decimals for consistency.
+     * @param collId The ID of the collateral type.
+     * @param usdValue The USD value to convert.
+     * @return tokenAmount The corresponding amount of collateral tokens.
+     */
+    function getTokenAmountFromUsdValue(bytes32 collId, uint256 usdValue) public returns (uint256 tokenAmount) {
+        uint8 collDecimals = s_tokenDecimals[collId];
+
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_collaterals[collId].priceFeed);
+        (, int256 price,,,) = priceFeed.latestRoundDataStalenessCheck();
+        uint256 scaledUpPrice = scaleUsdValueToDSCDecimals(collId, uint256(price));
+
+        tokenAmount = (usdValue * (10 ** collDecimals)) / scaledUpPrice;
+
+        return tokenAmount;
+    }
+
+    /**
+     * @notice Returns the raw USD value of a specified amount of collateral.
+     * @dev Fetches the current collateral price from the Chainlink price feed and calculates
+     * the USD value based on the amount. The result is in the same scale as the price feed's decimals,
+     * not scaled to 18 decimals.
+     * @param collId The ID of the collateral type.
+     * @param amount The amount of collateral to convert to USD value.
+     * @return rawUsdValue The raw USD value of the specified collateral amount.
+     */
+    function getRawUsdValue(bytes32 collId, uint256 amount) public view returns (uint256 rawUsdValue) {
+        uint8 collDecimals = s_tokenDecimals[collId];
+
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_collaterals[collId].priceFeed);
+        (, int256 price,,,) = priceFeed.latestRoundDataStalenessCheck();
+        rawUsdValue = (amount * uint256(price)) / (10 ** collDecimals);
+
+        return rawUsdValue;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           INTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
 
     /**
      * @notice Creates a new vault by locking collateral and minting DSC.
@@ -82,18 +152,6 @@ contract VaultManager is Storage {
     }
 
     /**
-     * @notice Returns the locked collateral and DSC debt of a vault.
-     * @param collId The ID of the collateral type.
-     * @param owner The address of the vault owner.
-     * @return collAmt The collateral amount locked in the vault.
-     * @return dscDebt The outstanding DSC debt of the vault.
-     */
-    function vaultDetails(bytes32 collId, address owner) internal view returns (uint256 collAmt, uint256 dscDebt) {
-        collAmt = s_vaults[collId][owner].lockedCollateral;
-        dscDebt = s_vaults[collId][owner].dscDebt;
-    }
-
-    /**
      * @notice Determines if a vault is healthy based on its collateral and debt ratio.
      * @dev The health factor is calculated by comparing the collateral value (in USD) with the DSC debt, using a
      * trusted collateral ratio. A vault is considered healthy if the health factor is greater than or equal to
@@ -118,46 +176,6 @@ contract VaultManager is Storage {
         uint256 healthFactorRatio = (trustedVaultCollUsd * PRECISION) / vaultDebt;
 
         return (healthFactorRatio >= MIN_HEALTH_FACTOR, healthFactorRatio);
-    }
-
-    /**
-     * @notice Calculates the USD value of the collateral locked in a vault.
-     * @dev Fetches the current collateral price from the Chainlink price feed, scales it to 18 decimals,
-     * and returns the value in USD. This value is essential for determining the Health Factor ratio and
-     * the amount of DSC that can be minted against the collateral - the reason for scaling to 18 decimals.
-     * @param collId The ID of the collateral type.
-     * @param owner The address of the vault owner.
-     * @return usdValue The USD value of the locked collateral, scaled to 18 decimals.
-     */
-    function getVaultCollateralUsdValue(bytes32 collId, address owner) public returns (uint256 usdValue) {
-        uint256 vaultBal;
-        uint256 rawUsdValue;
-        uint256 scaledUpUsdValue;
-
-        vaultBal = s_vaults[collId][owner].lockedCollateral;
-        rawUsdValue = getRawUsdValue(collId, vaultBal);
-        scaledUpUsdValue = scaleUsdValueToDSCDecimals(collId, rawUsdValue);
-
-        return scaledUpUsdValue;
-    }
-
-    /**
-     * @notice Returns the raw USD value of a specified amount of collateral.
-     * @dev Fetches the current collateral price from the Chainlink price feed and calculates
-     * the USD value based on the amount. The result is in the same scale as the price feed's decimals,
-     * not scaled to 18 decimals.
-     * @param collId The ID of the collateral type.
-     * @param amount The amount of collateral to convert to USD value.
-     * @return rawUsdValue The raw USD value of the specified collateral amount.
-     */
-    function getRawUsdValue(bytes32 collId, uint256 amount) public view returns (uint256 rawUsdValue) {
-        uint8 collDecimals = s_tokenDecimals[collId];
-
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_collaterals[collId].priceFeed);
-        (, int256 price,,,) = priceFeed.latestRoundDataStalenessCheck();
-        rawUsdValue = (amount * uint256(price)) / (10 ** collDecimals);
-
-        return rawUsdValue;
     }
 
     /**
@@ -197,23 +215,15 @@ contract VaultManager is Storage {
     }
 
     /**
-     * @notice Converts a USD value to the equivalent amount of collateral tokens.
-     * @dev Uses the collateral's price and decimal precision to compute the token amount
-     * that corresponds to the given USD value. Price is scaled to 18 decimals for consistency.
+     * @notice Returns the locked collateral and DSC debt of a vault.
      * @param collId The ID of the collateral type.
-     * @param usdValue The USD value to convert.
-     * @return tokenAmount The corresponding amount of collateral tokens.
+     * @param owner The address of the vault owner.
+     * @return collAmt The collateral amount locked in the vault.
+     * @return dscDebt The outstanding DSC debt of the vault.
      */
-    function getTokenAmountFromUsdValue(bytes32 collId, uint256 usdValue) public returns (uint256 tokenAmount) {
-        uint8 collDecimals = s_tokenDecimals[collId];
-
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_collaterals[collId].priceFeed);
-        (, int256 price,,,) = priceFeed.latestRoundDataStalenessCheck();
-        uint256 scaledUpPrice = scaleUsdValueToDSCDecimals(collId, uint256(price));
-
-        tokenAmount = (usdValue * (10 ** collDecimals)) / scaledUpPrice;
-
-        return tokenAmount;
+    function vaultDetails(bytes32 collId, address owner) internal view returns (uint256 collAmt, uint256 dscDebt) {
+        collAmt = s_vaults[collId][owner].lockedCollateral;
+        dscDebt = s_vaults[collId][owner].dscDebt;
     }
 
 }

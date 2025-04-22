@@ -19,6 +19,9 @@ contract DecentralizedStableCoin is Ownable, ERC20Burnable, ERC20Permit {
 
     uint256 private constant MINIMUM_BURN_AMOUNT = 1;
 
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
     error DecentralizedStableCoin__InsufficientBurnAmount(uint256 minimumBurnAmount, uint256 burnAmount);
     error DecentralizedStableCoin__InsufficientBalanceToBurn(uint256 balance, uint256 burnAmount);
     error DecentralizedStableCoin__CannotMintZeroAmountOfTokens();
@@ -30,6 +33,9 @@ contract DecentralizedStableCoin is Ownable, ERC20Burnable, ERC20Permit {
      */
     constructor() Ownable(msg.sender) ERC20("DecentralizedStableCoin", "DSC") ERC20Permit("DecentralizedStableCoin") {}
 
+    /*//////////////////////////////////////////////////////////////
+                            PUBLIC FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
     /**
      * @notice Burns a specified amount of DSC tokens from the protocol's balance.
      * @dev Can only be called by the DSCEngine contract (owner). When users request
