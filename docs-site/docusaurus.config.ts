@@ -70,7 +70,7 @@ const config: Config = {
           label: 'Docs',
         },
         {
-          href: 'https://github.com/facebook/docusaurus',
+          href: 'https://github.com/nzes1/oc-stablecoin',
           label: 'GitHub',
           position: 'right',
         },
