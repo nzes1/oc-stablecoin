@@ -14,7 +14,7 @@
 
 The DSC Protocol is a cutting-edge, overcollateralized stablecoin protocol built on the Ethereum blockchain. It enables users to generate DSC, a stablecoin pegged to the US dollar, by locking up a variety of whitelisted collateral assets. The protocol prioritizes decentralization, transparency, and robust mechanisms to maintain DSC's stability.
 
-For a deep dive into the design principles, architecture, and detailed explanations of the protocol's functionalities, please refer to the comprehensive documentation: [**[LINK TO YOUR LIVE DOCS GITHUB PAGES HERE]**](YOUR_DOCS_GITHUB_PAGES_LINK_HERE).
+For a deep dive into the design principles, architecture, and detailed explanations of the protocol's functionalities, please refer to the comprehensive documentation: [**[Official Documentation]**](https://nzes1.github.io/oc-stablecoin/).
 
 ## ✨ Key Highlights of DSC Protocol
 
