@@ -3,10 +3,12 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Foundry](https://img.shields.io/badge/Built%20with-Foundry-blueviolet.svg)](https://book.getfoundry.sh/)
 [![Docs](https://img.shields.io/badge/Documentation-Live%20Soon-brightgreen)](YOUR_DOCS_GITHUB_PAGES_LINK_HERE)
+[![Deploy DSC Docs](https://github.com/nzes1/oc-stablecoin/actions/workflows/deploy-docs.yml/badge.svg)](https://github.com/nzes1/oc-stablecoin/actions/workflows/deploy-docs.yml)
 [![Twitter](https://img.shields.io/badge/Follow%20me%20on-X-blue?style=social)](https://x.com/nzesi_eth)
 [![Discord](https://img.shields.io/badge/Chat%20on-Discord-7289DA?style=social)](https://discord.gg/FBB2AfbrKR)
 
 ---
+
 
 ## 🚀 Overview
 
