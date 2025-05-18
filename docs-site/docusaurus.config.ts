@@ -9,8 +9,9 @@ const config: Config = {
   tagline: 'Powering Decentralized Stability on Ethereum',
   favicon: 'img/favicon.ico',
 
-  url: 'https://your-docusaurus-site.example.com',
-  baseUrl: '/',
+  url: 'https://nzes1.github.io/',
+  baseUrl: '/oc-stablecoin/',
+  deploymentBranch: 'gh-pages',
 
   organizationName: 'nzes1',
   projectName: 'docusaurus',
