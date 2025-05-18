@@ -8,7 +8,7 @@ out/
 /broadcast/**/dry-run/
 
 # Docs
-docs/
+# docs/ -- not sure why I had it but had to remove for docusaurus actions to see the docs foldder
 
 # Dotenv file
 .env
