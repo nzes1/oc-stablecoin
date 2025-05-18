@@ -1,4 +1,4 @@
-name: Deploy Docusaurus Docs
+name: Deploy DSC Docs
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18.x' 
+          node-version: '18.19.0' # Using this on local environment
 
       - name: Install dependencies (docs-site)
         working-directory: ./docs-site
