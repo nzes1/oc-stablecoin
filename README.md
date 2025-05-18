@@ -1,322 +1,134 @@
+# 🔥 DSC Protocol: Decentralized Stability on Ethereum 🔥
 
-#### Key features for the permit functionality
-- protected against cross-chain replay attacks: chain id is verified
-- protected against contract collisions - sigs meant for contract A do not work on contract B if they share the same name/version due to separation by chainid
-- Ensures replay resistance - refer to cyfrin's blog on eip712 too
-
-- The Oz EIP712 contract/library/package automatically ensure that the signatures are replay resistant to cros-chain replays by ensuring that the chainid during signature/message hash generation is always equal to what was defined during deployment of the protocol. If that changed, then the msg hash is not formed. This is on lines 80 to 86 but specifically line 81 of the _domainSeparatorv4() in the EIP712.sol file. That's what I wanted to implement but Ozx has already. Will test it's working by writing a test for the same.====this is wrong
-- Changed/revised my understanding for replay protection - as long as the chainid forms part of the final hash that gets signed, supplying a hash that has a different chainid automatically means a different hash thus sig and hash won't match - this is the protection now.
-- i.e., If the chainId changes (e.g., moving from Ethereum to Polygon), the DOMAIN_SEPARATOR changes → the digest changes → the signature becomes invalid.
-
-#### Why No Explicit chainId Check Is Needed
-- Implicit Protection: When a user signs a permit, the signature is mathematically bound to the chainId used in the domain separator. If someone tries to replay the same signature on a different chain:
-
-    - The DOMAIN_SEPARATOR on the new chain will have a different chainId.
-
-    - The computed digest will not match the original signed digest.
-
-    - ecrecover(digest, signature) will return address(0) or an incorrect signer, causing the permit to revert.
-    - The burnFrom bug is also fixed and no user can circumvent the access control to burn tokens using the Oz burnFrom().
-  
-# DSCENGINE
-- frob in makerDAO is simply deposit/withdraw collateral and mint/burn DSC here
-- This contract defines the rules under which vaults/debt positions and balances can be manipulated.
-- No debt ceiling in collateral type
-- Minimum amount to mint is set - this guarantees that liquidations remain economically viable and efficient. 
-
-# Collateral Types
-- struct to hold collateral data parameters
-- DSEngine - access controlled
-- configure collateral type only doable by Admin.
-- Cannot modify configuration is previously set.
-- Admin can remove collateral configuration/support but only if there is no debt associated with that collateral. Removing means resetting the collateral config and also removing it from the allowed collateral ids array - some gem but gas intensive on this one too.
-
-## Minting
-- DSC is minted directly to the caller
-- No third party support like in MakerDAO where a user can choose where to send generated Dai tokens in my system, it is assumed that such support the user can utilize the DSC contract functions to move their tokens however they want because it is a fully compliant erc20. 
-
-## Liquidation Threshold
-The idea behind the “adjusted collateral” is to capture the fact that in a worst‐case liquidation scenario you won’t actually be able to use 100% of your collateral’s current market value. Instead, you only “trust” a fraction of that value to cover the debt. Let me explain with an analogy and then break it down:
-
-When you apply a liquidation threshold (for example, if LIQUIDATION_THRESHOLD is 50 and LIQUIDATION_PRECISION is 100), you’re effectively saying that only 50% of the raw collateral value is “trusted” to back the debt.
-
-Threshold% = (PRECISION * 100) / (over-collateralization%)
----
-
-### **Analogy**
-
-Imagine you have a house that you’ve pledged as collateral for a loan. In normal times, the house might be worth \$300,000. However, if you have to sell it quickly (say, in a market downturn), you might only be able to get 80% of its market value—about \$240,000. 
-
-- **Total Market Value:** \$300,000  
-- **“Trusted” Value in a Panic Sale:** \$240,000
-
-Now, when the lender evaluates your safety, they won’t look at the full \$300,000—they’ll look at \$240,000 because that’s what they could realistically recover if they had to liquidate.  
-
-Similarly, in many stablecoin systems, the protocol doesn’t use the entire collateral value; it applies a “liquidation threshold” (or safety buffer). In your code, that’s done by multiplying by something like LIQUIDATION_THRESHOLD/LIQUIDATION_PRECISION. For example, if LIQUIDATION_THRESHOLD is 50 (with LIQUIDATION_PRECISION 100), the protocol is effectively “trusting” only 50% of the collateral’s value.
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Foundry](https://img.shields.io/badge/Built%20with-Foundry-blueviolet.svg)](https://book.getfoundry.sh/)
+[![Docs](https://img.shields.io/badge/Documentation-Live%20Soon-brightgreen)](YOUR_DOCS_GITHUB_PAGES_LINK_HERE)
+[![Twitter](https://img.shields.io/badge/Follow%20me%20on-X-blue?style=social)](https://x.com/nzesi_eth)
+[![Discord](https://img.shields.io/badge/Chat%20on-Discord-7289DA?style=social)](https://discord.gg/FBB2AfbrKR)
 
 ---
 
-### **Why Not Just Check Total Collateral to DSC?**
+## 🚀 Overview
 
-- **Without the Buffer:**  
-  If you simply checked total collateral value against DSC minted, you might say, “Great, my collateral covers my debt 2:1, so I’m safe.”  
-- **But in Reality:**  
-  You need to account for potential losses in value during a liquidation. Not all of that collateral can be counted on to cover the debt if the market turns sour.  
-- **The Safety Buffer:**  
-  The adjusted collateral (for example, totalCollateralValueInUSD * (LIQUIDATION_THRESHOLD/LIQUIDATION_PRECISION)) tells you what portion of your collateral the system “trusts” to cover your debt. If that trusted value, when divided by the debt, falls below 1 (or your set minimum health factor), then the position is considered undercollateralized—even if the raw numbers (total collateral / DSC minted) look acceptable.
+The DSC Protocol is a cutting-edge, overcollateralized stablecoin protocol built on the Ethereum blockchain. It enables users to generate DSC, a stablecoin pegged to the US dollar, by locking up a variety of whitelisted collateral assets. The protocol prioritizes decentralization, transparency, and robust mechanisms to maintain DSC's stability.
 
----
+For a deep dive into the design principles, architecture, and detailed explanations of the protocol's functionalities, please refer to the comprehensive documentation: [**[LINK TO YOUR LIVE DOCS GITHUB PAGES HERE]**](YOUR_DOCS_GITHUB_PAGES_LINK_HERE).
 
-### **Key Points**
+## ✨ Key Highlights of DSC Protocol
 
-- **Risk Management:**  
-  The adjusted value reflects the realistic amount you can recover in a liquidation event. It’s a conservative measure designed to protect the protocol and its users.
+* **Overcollateralization:** DSC is backed by a surplus of collateral, providing a strong safety net against market volatility and ensuring its peg stability.
+* **Decentralized Governance:** The protocol is designed with future decentralized governance in mind, allowing the community to shape its evolution.
+* **Multi-Collateral Support:** The protocol supports a diverse range of carefully vetted collateral assets, enhancing its resilience and user flexibility.
+* **Stability Mechanisms:** Robust mechanisms, including dynamic stability fees and potential liquidations, are in place to maintain DSC's peg to USD.
+* **Transparency:** All transactions and collateralization ratios are transparently recorded on the Ethereum blockchain.
 
-- **Effective Collateral Backing:**  
-  Checking total collateral might give a false sense of security because it assumes a perfect market sale. The adjusted collateral is a way to say, “Even if I had to liquidate under less-than-ideal conditions, do I still have enough to cover the debt?”
+## 🛠️ Development Setup (Built with Foundry)
 
-- **Undercollateralization Check:**  
-  By comparing the ratio of this adjusted (or “trusted”) collateral to the debt, the protocol ensures that even under adverse conditions the collateral backing remains sufficient. If the ratio falls below the required threshold, the vault is deemed undercollateralized and becomes eligible for liquidation.
+This project leverages the blazing-fast and developer-friendly [Foundry](https://book.getfoundry.sh/) framework for smart contract development, testing, and deployment.
 
----
+### Prerequisites
 
-### **Summary**
+Make sure you have Foundry installed on your system. Follow the installation instructions in the [Foundry Book](https://book.getfoundry.sh/getting-started/installation).
 
-- **Why Use Adjusted Collateral?**  
-  It reflects a realistic, conservative valuation of collateral during stressful market conditions. It’s not that overcollateralization isn’t maintained—rather, it’s a risk control measure that ensures that only the portion of the collateral that’s realistically liquidatable is used to secure the debt.
+### Getting Started
 
-- **Why Not Just Total Collateral / DSC?**  
-  Because that might overestimate your “real” collateral backing the debt. The safety buffer (adjusted collateral) is critical to ensure that even in a downturn, there’s enough value to cover the stablecoin debt.
+1.  **Clone the repository:**
+    ```bash
+    git clone [YOUR_GITHUB_REPOSITORY_URL_HERE]
+    cd dsc-protocol
+    ```
 
-This is why your function uses the adjusted collateral value in calculating the health factor. It’s not simply a mathematical twist—it’s a deliberate design choice to incorporate a safety margin that protects both the protocol and its users.
+2.  **Install dependencies:**
+    ```bash
+    forge install
+    ```
 
+### Running Tests
 
-## Auctioning underwater positions
-- will use linear decrease but the minimum  price at max duration for auction will not be hitting zero. WIll come up with a mechanimsm to determine maybe a percentage drop of the initial price. - some good reads on liquidation : https://blog.amberdata.io/performing-liquidations-on-makerdao
+To ensure the integrity and correctness of the smart contracts, run the comprehensive test suite:
 
+```bash
+forge test
+```
 
-### Liquidations
-#### Principles
-1.  Time-Decaying Collateral Discount - from 3% decaying down to 1.8% in 1 hour so linear decrease.
+### Deploying to a Testnet
 
-Goal: Incentivize rapid liquidations to minimize protocol risk.
+Developers looking to deploy DSC Protocol contracts to a testnet (e.g., Sepolia) can leverage Foundry's secure and efficient secret management.
 
-Discount Applied to Collateral, Not Debt
+1.  **Securely Manage Your Private Key with a Keystore:** Foundry strongly recommends using an encrypted keystore file to protect your private key. This method avoids exposing your key directly in scripts or environment variables.
 
-Scenario: A position has 100 DSC debt (pegged to 1)backed by collateral worth 150.
+    >**Avoid hardcoding your private key in scripts or configuration files such as the `.env`.**
 
-  Undercollateralization: Collateral value drops to $140 (<150% of debt).
+      * **Create a New Keystore (*If you don't have an existing private key you want to use*)**
 
-Liquidation Process:
+        ```bash
+        cast wallet new --password <your_password> --path ./keystore/<your_wallet_name>.json
+        ```
 
-  Liquidator repays the full debt (100 DSC, worth $100).
+        * Replace `<your_password>` with a strong password.
+        * Replace `<your_wallet_name>` with a descriptive name for your wallet (e.g., `sepolia_deployer`). 
+        * This command creates a keystore file in the `./keystore/` directory.
 
-  In return, they receive collateral worth $100 + discount (e.g., $110 for a 10% discount).
+      * **Import Your Existing Private Key into a Keystore (*If you have an existing private key you want to use*)**
 
-Profit: Liquidator sells the collateral for $110 → $10 profit.
+        ```bash
+        cast wallet import <your_wallet_name> --interactive --keystore ./keystore/<your_wallet_name>.json
+        ```
 
-Why This Works:
+          * Replace `<your_wallet_name>` with a descriptive name.
+          * The `--interactive` flag prompts you to securely enter your private key.
+          * The `--keystore` flag specifies the path to your keystore file. You will be prompted to create and confirm a password to encrypt the key within this file.
 
-- The protocol recovers the full debt (100 DSC).
+2.  **Set up Your Testnet RPC URL:** Store your testnet RPC URL in a `.env` file for easy management.
 
-- Liquidators profit from the discounted collateral, not from underpaying the debt.
+      * Create a `.env` file in your project root (if it doesn't exist).
 
-Time-Decaying Discount
+      * Add your RPC URL:
 
-Mechanics:
+        ```
+        TESTNET_RPC_URL="YOUR_TESTNET_RPC_URL"
+        ```
 
-  Initial Discount: Starts at a high value (e.g., 15%) when the position is first undercollateralized.
+      * Ensure `.env` is in your `.gitignore`.
 
-  Linear Decay: Discount decreases over time (e.g., to 5% after 1 hour).
+      * Load the environment variable in your terminal:
 
-  Example:
+        ```bash
+        source .env
+        ```
 
-  T+0: 15% discount → Liquidator receives $115 collateral for repaying $100 debt.
+3.  **Run the Deployment Script:** Foundry provides powerful scripting capabilities. You'll find deployment scripts in the `script` folder of the project. Adapt the existing scripts or create new ones for your specific deployment needs
 
-  T+30min: 10% discount → $110 collateral.
+      * **Deploying with a Keystore File**
 
-  T+60min: 5% discount → $105 collateral.
+        ```bash
+        forge script script/DeployDSC.s.sol:DeployDSC --rpc-url $TESTNET_RPC_URL --account <your_wallet_name> --keystore ./keystore/<your_wallet_name>.json --broadcast -vvvv
+        ```
 
-Risks Mitigated by this principle
-Protocol Insolvency Risk
+          * Replace `script/DeployDSC.s.sol:DeployDSC` with the correct path and contract name of your deployment script.
+          * Replace `<your_wallet_name>` with the name you used when creating or importing your keystore.
+          * You will be prompted to enter the password for your keystore file.
 
-  By encouraging immediate liquidation, the protocol avoids further collateral value drops (e.g., from 140→120), which could leave the debt undercollateralized.
+**Important Security Pledge:**
 
-Liquidator Inaction
+[![Cyfrin Pledge](https://img.shields.io/badge/CYFRIN-green?style=for-the-badge&logo=none&logoColor=white)](https://github.com/Cyfrin/foundry-full-course-cu/discussions/5)[![Stop .env Keys](https://img.shields.io/badge/STOP%20.ENV%20KEYS-orange?style=for-the-badge&logo=none&logoColor=white)](https://github.com/Cyfrin/foundry-full-course-cu/discussions/5)
 
-  A decaying discount creates a race-to-liquidate: Early liquidators earn higher rewards, while latecomers get smaller discounts.
+The Cyfrin team, (of course, from the alpha himself - Patrick!), has strongly advocated against storing private keys in `.env` files due to the inherent security risks. Their discussion on this topic provides valuable context and reinforces the importance of secure key management practices like using Foundry's keystore. You can read more about their pledge and the reasoning behind it [here](https://github.com/Cyfrin/foundry-full-course-cu/discussions/5).
 
-Market Volatility
+> There is also a YT video showcasing this recommendation - done by Patrick himself [**NEVER use a .env file again | Send this to your foundry friends to keep them safe**](https://www.youtube.com/watch?v=VQe7cIpaE54)
 
-  Rapid liquidations reduce exposure to volatile collateral prices.
+>**TIP**
+>
+>Always prioritize the security of your private keys. Using dedicated keystore files managed by Foundry is the recommended and most secure method for handling private keys, ensuring they are encrypted and not directly exposed.
+>
+>
 
-Documentation snippet
-### Liquidation Mechanism  
-When a position becomes undercollateralized (e.g., collateral value < 150% of debt), liquidators are incentivized to repay the debt in full (`100 DSC`) in exchange for collateral at a **discounted rate**.  
+## 🙏 Acknowledgements
 
-- **Discount Structure**:  
-  - Starts at 15% and linearly decays to 5% over 1 hour.  
-  - Example: Repaying `$100` debt yields `$115` collateral initially, decreasing to `$105` after 1 hour.  
+I would like to extend my sincere gratitude to the following for their inspiration and the resources that contributed to this project:
 
-- **Purpose**:  
-  - Ensures debt is fully repaid while rewarding liquidators for acting swiftly.  
-  - Protects the protocol from prolonged exposure to undercollateralized positions.  
+* [![Cyfrin Updraft](https://img.shields.io/badge/Inspired%20by-Cyfrin%20Updraft-greenviolet)](https://twitter.com/UpdraftCyfrin) - This project was inspired by the insightful coursework provided by [**Cyfrin Updraft**](https://updraft.cyfrin.io/).
 
-Key Constraint: Rewards (discounts) are capped by the available collateral to prevent over-penalization.
-Thus, 
+* **Patrick Collins:** - A special thank you to Patrick Collins, the Alpha Tutor from Cyfrin Updraft, for his exceptional educational content and guidance. Follow him on X and subscribe to his Youtube Channel linked below. <br> [![Patrick Collins on Twitter](https://img.shields.io/twitter/follow/patrickalphac?style=social)](https://twitter.com/patrickalphac) [![Patrick Collins on YouTube](https://img.shields.io/badge/YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/@PatrickAlphaC)
 
-DISCOUNT = MIN(TIME-BASED DISCOUNT, (Collateral VALUE / DSC DEBT)-1)
-
-The second discount calctulation makes sure the max discount availableis only up to what the user who has been liquidated has on their collateral locked value. Even when the discount is larger percentage than available collateral value.
-
-To avoid losing precision, the calculation above is scaled up using 1e18 before dividing with debt and then the 1 is also scaled to 1e18 so that the calculation is brought down to percentage numbers.
-
-so the formula for the available max discount
-
-(Collateral X PRECISION of 1e18)/Debt - 1e18
-
---need a function to calculatemaxdiscount()
--- minmimumoftwovalues()
-
-### Precision Handling  
-All values (collateral, debt, discounts) are scaled by `1e18` to avoid truncation:  
-- **Example**: $140 → `140e18`, 10% → `0.1e18`.  
-- **Max Discount**: `(collateral * 1e18 / debt) - 1e18`.  
-
-2. Risk-Adjusted Liquidator Rewards
-
-To prioritize liquidation of larger debt positions (higher systemic risk) while ensuring smaller positions remain attractive, use a scaled reward system based on debt size.
-- Using the "clamped linear" model or also called piecewise linear model.
-- This model is governed by the formula - Reward = min(max(k × Debt, R_min), R_max)
-- where:
-  - k (the Proportionality Constant):
-This value represents the fraction of the debt that you’ll give as a reward. For instance, if k is 0.05 (or 5%), a debt of 1,000 units would yield a reward of 50 units. In DeFi protocols, liquidation bonuses often hover in the 5–10% range. So you might choose k around 0.05 to 0.1, depending on how aggressive you want the incentive to be.
-  - R_min (Minimum Reward):
-This is a floor to ensure that even very small liquidations are worthwhile for liquidators. The idea is to cover basic costs (like gas fees) so that the effort is always compensated. On networks like Ethereum, where gas can be expensive, a typical minimum might be in the range of 10–20 stable coin units (or an equivalent value) so that liquidators are motivated even when the debt is small.
-- R_max (Maximum Reward):
-This cap prevents the reward from growing without bounds when the debt is very large. It’s a safeguard against over-incentivizing the liquidation of huge positions, which might distort system dynamics. Drawing inspiration from protocols like MakerDAO or Compound—where penalties or incentives rarely exceed a certain percentage of the collateral or debt—you might set R_max to a value that, for example, limits rewards to the equivalent of a 5–10% bonus on a “typical” large liquidation. In practice, values might range anywhere from a few hundred to a thousand stable coin units, depending on the typical debt sizes and your risk management goals.
-
-For this project, the following values are used:
-
-For collateral with less than 150% overcollateralization: k = 0.5% (0.005)
-
-For collateral with 150% or more overcollateralization: k = 1.5% (0.015) -- Liquidators receive a higher k when the collateral is riskier (150% and above), which aligns with the need to compensate for higher volatility.
-
-R_min: A reward equivalent to $10 (10 dsc) -- Setting a minimum reward ensures that even the smallest debt positions (limited to 100 dsc) offer a sufficient incentive. For a 100 dsc debt, the computed reward would be very low (0.5 or 1.5 dsc), so bumping it to $10 is necessary to cover gas fees and make liquidations worthwhile. Although this means small positions have a high effective reward percentage, it’s a known and accepted trade-off in many protocols.
-
-R_max: 5000 dsc (or $5000) -- The cap of 5000 dsc ensures that no matter how large the debt, the reward doesn’t spiral out of control. For very large positions, even though the raw calculation would yield a much higher bonus, the cap keeps the payout predictable.
-
-For instance, under a 110% requirement, the reward reaches 5000 dsc only at around 1,000,000 dsc in debt.
-Under a 150% requirement, the cap is hit at an even lower debt level (around 333,333 dsc) because of the higher k.
-This design is common to prevent excessive incentives that could destabilize the system. If your protocol expects many high-debt positions, you might consider a slight increase in R_max, but be cautious: raising it too much can lead to over-incentivization and potential abuse.
-
--- For the smallest allowed debt, the computed reward (k × Debt) is less than the minimum. Therefore, the system always awards the minimum of 10 dsc. This helps ensure liquidators cover the cost (like gas fees) even for very small positions.
-
--- For very large debt positions (whether in the millions or billions), the computed reward would normally be huge. However, thanks to the R_max cap, the reward never exceeds 5000 dsc. This prevents runaway incentives and ensures that the reward stays within a controlled, predictable range.
-
-## Fees
-Protocol fees 1% APR (annual percentage rate)
-Liquidation penalty - 2%
-Years were removed from solidity due to leap seconds and leap years.
-But even in leap years, A year is basically 365 days.
-
-Normally interest = Principle * Rate * Duration of interest which is normally 1 year
-So we can say for For a principal amount D (debt), an annual interest rate r (as a decimal), and a time period T expressed in years, the interest accrued is given by:
-interest = D * r * T
-
-Sine r is an annual rate, then the time T must be in years. In solidity, time is usually in seconds. TO convert the seconds to years, then we divide any given number of seconds with SECONDS_IN_A_YEAR which is approximately 365 days or simply 365 *  24 * 60 * 60 =~ 31,536,000
-
-So the formula is now:
-
-Interest = D * r * T_in_Years
-
-where T_in_Years  = (T_in_seconds) / SECONDS_IN_A_YEAR
-
-Thus Interest = (D * r * ((T_in_seconds) / SECONDS_IN_A_YEAR))
-
-Where the formula can be simplified to multiplication first and division later as:
-
-Interest = (D * r * T_in_seconds) / SECONDS_IN_A_YEAR
-
-But notice that D and r are in 18 decimals. Multiplying them results to 36 decimals result since the time does not have decimals. Thertefore the 36 decimals needs to be scaled down. To do that, we scale up the divisor with 18 decimals so we end up with 
-
-Interest = (D * r * T_in_seconds) / (SECONDS_IN_A_YEAR * 1e18)
-
-So the final interest amount is also in 18 decimals which matches dsc. Its easy now to get the equivalent of the collateral tokens amount to this dsc amount and charge it from that vault.
-
-As for liquidation penalty is a flat 1% fee on the debt size irregardless of the time
-
-liq_penalty = debt * LIQ_PENALTY
-
-and since both are in 18 decimals, the result also needs to be scaled down:
-
-liq_penalty = (debt * LIQ_PENALTY) / 1e18
-
-
-## User flow Actions
-1. Deposit collateral and mint dsc
-   ERC20Like tokens deposit - check ;; restrict zero deposits
-   Ether deposit - check
-   mint dsc - check
-   collateral topups - check
-
-2. Redeem
-   Remove from protocol - check
-   Redeem - check e.g when token coll appreciates 
-   Redeem by burning dsc - check. user has to preapprove the engine prior to burn.
-   Burn - just burning check.
-
-3. Increase and decrease debt
-   add more collateral to support debt - check
-   top-up debt - check
-      needs to add the new coll to support new debt
-      pay fees upto now before addition - users have to be made aware of this flow that when adding more debt, they will need a little bit extra to cover fees upto then first.
-      add debt
-      HF has to maintain
-
-4. Liquidate users
-   mark underwater vaults with ability to be the liquidator - check
-   if user can choose to be first liquidator - check
-   liquidator
-    initiates liquidation by confirming vault unhealthy - check
-    settle 1% liquidation penalty - check
-    liquidator rewards in USD - check
-      disounts are calculated properly - check
-      disount rates correct - check ---????confirm with tests
-      reward based on size --check
-      precision on reward calculations -- check
-      
-
-    ////LIQUIDATIONS
-    // only take debt value + penalty + any fees then return excess to owner
-    // decreasing discount on collateral - this way liquidators are incentivized to act quickly.
-    // To avoid liquidators not willing to liquidate small loans - perhaps due to high
-    // gas costs which are justifiable by the profit they will make, then I will implement
-    // minimum loan requirements so that underwater vaults are always liquidatable
-    // At the minimum, pay the dsc loan. if not loan + penalty + fees; when the 3 cannot be fulfilled
-    // at least do loan, or loan + fees or loan + penalty or all of them. maybe greater of
-    // either loan + fees or loan + penalty -- whichever is available.
-    // To avoid price impacts of large loans - supplyCap needs to be introduced.
-
-
-    ///// vault is HEALTHY
-    // HF = ratio of trusted/ backing coll to debt
-        // Needs to be more than minHF which is always 1e18 - the assumption here is that
-        // the ratio of the collateral that the protocol considers as the safety margin or rather
-        // cover of loan is the maximum you can mint dsc. this value will yield a ratio of 1 and
-        // any amounts greater than this max amount breaks the ratio below 1. Minting less than the
-        // max dsc for the locked collateral means hf is above 1 hence healthy.
-        // both have 18 decimals i.e. the coll in usd and DSC
-        // To maintain the decimals for the health factor, then the result needs to be
-        // scaled up with 18 decimals. The ratio automatically  removes the decimals.
-        // SO scaling result up is like (vaultCollBalUsd / vaultDebt) * 18decimals.
-        // But it's always recommended to do multiplication before division so that you
-        // don't lose precision due to division.
-        // so that changes to (vaultCollBalUsd * 18decimals / vaultDebt)
-
-
-0 ETH
-1 WETH
-2 LINK
-3 USDT
-4 DAI
+-----

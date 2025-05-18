@@ -343,34 +343,6 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         return calculateProtocolFee(debt, debtPeriod);
     }
 
-    /**
-     * @dev Handles internal logic for adding collateral and minting DSC after deposit.
-     * Collects accrued protocol fees, updates global and vault-level accounting, and ensures vault health.
-     * @param collId The ID of the collateral token.
-     * @param collAmt The amount of collateral to deposit.
-     * @param dscAmt The amount of DSC to mint.
-     */
-    function addToVault(bytes32 collId, uint256 collAmt, uint256 dscAmt) internal {
-        settleProtocolFees(collId, msg.sender, s_vaults[collId][msg.sender].dscDebt);
-
-        s_collBalances[collId][msg.sender] -= collAmt;
-        s_vaults[collId][msg.sender].lockedCollateral += collAmt;
-        s_vaults[collId][msg.sender].dscDebt += dscAmt;
-        s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
-
-        (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
-        if (!healthy) {
-            revert DSCEngine__HealthFactorBelowThreshold(hf);
-        }
-
-        bool mintStatus = i_DSC.mint(msg.sender, dscAmt);
-        if (!mintStatus) {
-            revert DSCEngine__MintingDSCFailed();
-        }
-
-        emit DscMinted(msg.sender, dscAmt);
-    }
-
     /*//////////////////////////////////////////////////////////////
                             PUBLIC FUNCTIONS
     //////////////////////////////////////////////////////////////*/
@@ -587,6 +559,34 @@ contract DSCEngine is Storage, Ownable, Fees, ReentrancyGuard, CollateralManager
         (bool healthy, uint256 healthFactor) = isVaultHealthy(collId, msg.sender);
         if (!healthy) {
             revert DSCEngine__HealthFactorBelowThreshold(healthFactor);
+        }
+
+        bool mintStatus = i_DSC.mint(msg.sender, dscAmt);
+        if (!mintStatus) {
+            revert DSCEngine__MintingDSCFailed();
+        }
+
+        emit DscMinted(msg.sender, dscAmt);
+    }
+
+    /**
+     * @dev Handles internal logic for adding collateral and minting DSC after deposit.
+     * Collects accrued protocol fees, updates global and vault-level accounting, and ensures vault health.
+     * @param collId The ID of the collateral token.
+     * @param collAmt The amount of collateral to deposit.
+     * @param dscAmt The amount of DSC to mint.
+     */
+    function addToVault(bytes32 collId, uint256 collAmt, uint256 dscAmt) internal {
+        settleProtocolFees(collId, msg.sender, s_vaults[collId][msg.sender].dscDebt);
+
+        s_collBalances[collId][msg.sender] -= collAmt;
+        s_vaults[collId][msg.sender].lockedCollateral += collAmt;
+        s_vaults[collId][msg.sender].dscDebt += dscAmt;
+        s_vaults[collId][msg.sender].lastUpdatedAt = block.timestamp;
+
+        (bool healthy, uint256 hf) = isVaultHealthy(collId, msg.sender);
+        if (!healthy) {
+            revert DSCEngine__HealthFactorBelowThreshold(hf);
         }
 
         bool mintStatus = i_DSC.mint(msg.sender, dscAmt);

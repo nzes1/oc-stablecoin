@@ -1,0 +1,144 @@
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+/* You can override the default Infima variables here. */
+:root {
+  --ifm-color-primary: #2e8555;
+  --ifm-color-primary-dark: #29784c;
+  --ifm-color-primary-darker: #277148;
+  --ifm-color-primary-darkest: #205d3b;
+  --ifm-color-primary-light: #33925d;
+  --ifm-color-primary-lighter: #359962;
+  --ifm-color-primary-lightest: #3cad6e;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+/* For readability concerns, you should choose a lighter palette in dark mode. */
+[data-theme='dark'] {
+  --ifm-color-primary: #25c2a0;
+  --ifm-color-primary-dark: #21af90;
+  --ifm-color-primary-darker: #1fa588;
+  --ifm-color-primary-darkest: #1a8870;
+  --ifm-color-primary-light: #29d5b0;
+  --ifm-color-primary-lighter: #32d8b4;
+  --ifm-color-primary-lightest: #4fddbf;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+.homepage-card {
+  border: 1px solid var(--ifm-color-border);
+  padding: 20px;
+  border-radius: var(--ifm-border-radius);
+  text-decoration: none;
+  color: var(--ifm-font-color-base);
+  transition: transform 0.2s ease-in-out;
+  margin-bottom: 15px;
+}
+
+.homepage-card:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--ifm-shadow-sm);
+}
+
+.homepage-card h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+/* Existing custom CSS */
+
+/* Existing custom CSS */
+
+.homepage-tile {
+  border: 1px solid var(--ifm-color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 15px;
+  box-shadow: var(--ifm-shadow-sm);
+  transition: box-shadow 0.3s ease-in-out, background-color 0.3s ease-in-out;
+  /* Using a custom background that should work reasonably well on both themes */
+  background-color: #f8f8f8; /* Light gray as a base */
+}
+
+/* Dark theme override for background color */
+html[data-theme='dark'] .homepage-tile {
+  background-color: #282828; /* Dark gray for dark theme */
+}
+
+.homepage-tile:hover,
+.homepage-tile:focus {
+  box-shadow: var(--ifm-shadow-md);
+  /* Subtle highlight on hover using a custom color */
+  background-color: #e0f7fa; /* Light cyan for highlight */
+}
+
+/* Dark theme override for hover highlight */
+html[data-theme='dark'] .homepage-tile:hover,
+html[data-theme='dark'] .homepage-tile:focus {
+  background-color: #79d1dd; /* Cyan for highlight in dark theme */
+}
+
+.homepage-tile-link {
+  display: block;
+  padding: 20px;
+  text-decoration: none !important;
+  /* Using a theme-aware text color */
+  color: var(--ifm-font-color-base);
+  height: 100%;
+}
+
+.homepage-tile-link h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  /* Using a custom primary color */
+  color: #1e88e5; /* A nice blue */
+}
+
+/* Dark theme override for title color */
+html[data-theme='dark'] .homepage-tile-link h3 {
+  color: #64b5f6; /* A lighter blue for dark theme */
+}
+
+.homepage-tile-link p {
+  margin-bottom: 20px;
+  /* Using a theme-aware secondary text color */
+  color: var(--ifm-font-color-secondary);
+}
+
+html[data-theme='dark'] .homepage-tile:hover .homepage-tile-link h3,
+html[data-theme='dark'] .homepage-tile:focus .homepage-tile-link h3 {
+  color: white; /* Or black, whichever provides better contrast */
+}
+
+.homepage-tile-link .arrow-icon {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 1.2rem;
+  vertical-align: middle;
+  opacity: 0.7;
+}
+
+/* Responsive adjustments (optional) */
+@media (min-width: 768px) {
+  .homepage-tile {
+    flex: 0 0 calc(50% - 10px);
+  }
+}
+
+@media (min-width: 992px) {
+  .homepage-tile {
+    flex: 0 0 calc(33.33% - 14px);
+  }
+}
+
+:root {
+  --ifm-color-border: #03c3fd; /* A light gray for light theme */
+}
+
+html[data-theme='dark'] {
+  --ifm-color-border: #03c3fd; /* A darker gray for dark theme */
+}
+

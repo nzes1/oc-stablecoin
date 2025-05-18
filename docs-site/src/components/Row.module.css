@@ -1,0 +1,5 @@
+.row {
+  display: flex;
+  gap: 20px; /* Adjust the gap between children as needed */
+  margin-bottom: 20px; /* Adjust margin as needed */
+}

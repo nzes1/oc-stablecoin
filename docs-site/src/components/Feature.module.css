@@ -1,0 +1,40 @@
+/* src/components/Feature.module.css */
+.feature {
+  flex: 1;
+  border: 1px solid var(--ifm-color-border); /* Theme-aware border color */
+  padding: 20px;
+  border-radius: var(--ifm-border-radius);
+  text-align: center;
+  margin-bottom: 20px; /* Add some spacing between features */
+  background-color: var(--ifm-background-surface); /* Theme-aware background */
+  transition: border-color 0.2s ease-in-out, background-color 0.2s ease-in-out;
+}
+
+.featureIcon {
+  font-size: 2rem;
+  margin-bottom: 10px;
+  color: var(--ifm-color-primary); /* Theme-aware primary color for icon */
+}
+
+.feature h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: var(--ifm-font-color-base); /* Theme-aware base font color */
+}
+
+.feature p {
+  color: var(--ifm-font-color-secondary); /* Theme-aware secondary font color */
+}
+
+/* Optional: Style for hover effect */
+.feature:hover {
+  border-color: var(--ifm-color-primary-dark);
+  background-color: var(--ifm-background-surface-hover);
+}
+
+/* Responsive adjustments (optional) */
+@media (min-width: 768px) {
+  .feature {
+    margin-bottom: 0;
+  }
+}

@@ -1,0 +1,31 @@
+/* src/components/Hero.module.css */
+.hero {
+  background: linear-gradient(135deg, #1c1c1e 0%, #2e3035 100%); /* Keep your background */
+  color: #fff; /* Keep your text color */
+  padding-top: 0; /* Remove top padding */
+  padding-bottom: 0; /* Remove bottom padding */
+  text-align: center;
+}
+
+.heroTitle {
+  font-size: 3.5rem;
+  color:aqua;
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
+.heroSubtitle {
+  font-family: monospace;
+  font-size: 1.5rem;
+  line-height: 1.6;
+  margin-top: 3rem;
+  margin-bottom: 2rem;
+  color:cyan;
+  text-align: center;
+}
+
+.heroButtons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
