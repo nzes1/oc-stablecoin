@@ -55,7 +55,7 @@ const config: Config = {
   ],
 
   themeConfig: {
-    image: 'img/dsc-docs-social-card.png',
+    image: 'img/dsc-protocol-preview.png',
     navbar: {
       title: 'DSC Protocol',
       logo: {
