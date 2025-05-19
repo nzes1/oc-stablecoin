@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Foundry](https://img.shields.io/badge/Built%20with-Foundry-blueviolet.svg)](https://book.getfoundry.sh/)
-[![Docs](https://img.shields.io/badge/Documentation-LIVE-brightgreen)](YOUR_DOCS_GITHUB_PAGES_LINK_HERE)
+[![Docs](https://img.shields.io/badge/Documentation-LIVE-brightgreen)](https://nzes1.github.io/oc-stablecoin/)
 [![Deploy DSC Docs](https://github.com/nzes1/oc-stablecoin/actions/workflows/deploy-docs.yml/badge.svg)](https://github.com/nzes1/oc-stablecoin/actions/workflows/deploy-docs.yml)
 [![Twitter](https://img.shields.io/badge/Follow%20me%20on-X-blue?style=social)](https://x.com/nzesi_eth)
 [![Discord](https://img.shields.io/badge/Chat%20on-Discord-7289DA?style=social)](https://discord.gg/FBB2AfbrKR)
@@ -14,7 +14,7 @@
 
 The DSC Protocol is a cutting-edge, overcollateralized stablecoin protocol built on the Ethereum blockchain. It enables users to generate DSC, a stablecoin pegged to the US dollar, by locking up a variety of whitelisted collateral assets. The protocol prioritizes decentralization, transparency, and robust mechanisms to maintain DSC's stability.
 
-For a deep dive into the design principles, architecture, and detailed explanations of the protocol's functionalities, please refer to the comprehensive documentation: [**[Official Documentation]**](https://nzes1.github.io/oc-stablecoin/).
+For a deep dive into the design principles, architecture, and detailed explanations of the protocol's functionalities, please refer to the comprehensive documentation: [**Official Documentation**](https://nzes1.github.io/oc-stablecoin/).
 
 ## ✨ Key Highlights of DSC Protocol
 
@@ -36,8 +36,8 @@ Make sure you have Foundry installed on your system. Follow the installation ins
 
 1.  **Clone the repository:**
     ```bash
-    git clone [YOUR_GITHUB_REPOSITORY_URL_HERE]
-    cd dsc-protocol
+    git clone https://github.com/nzes1/oc-stablecoin.git
+    cd oc-stablecoin
     ```
 
 2.  **Install dependencies:**
