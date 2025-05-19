@@ -43,3 +43,18 @@
     display: block; /* Ensure full width is respected */
   }
 }
+
+/* Mobile Styles (for font sizes) */
+@media (max-width: 767px) {
+  .heroTitle {
+    font-size: 2.5rem; /* Reduce title font size on mobile */
+    margin-bottom: 0.75rem;
+  }
+
+  .heroSubtitle {
+    font-size: 1rem; /* Reduce subtitle font size on mobile */
+    line-height: 1.4;
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+}
