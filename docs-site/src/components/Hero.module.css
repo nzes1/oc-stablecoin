@@ -29,3 +29,17 @@
   justify-content: center;
   gap: 1rem;
 }
+
+/* Mobile Styles */
+@media (max-width: 767px) { /* Adjust breakpoint as needed */
+  .heroButtons {
+    flex-direction: column; /* Stack buttons vertically on mobile */
+    align-items: center; /* Center the stacked buttons horizontally */
+    gap: 0.75rem; /* Reduce gap for stacked buttons */
+  }
+
+  .heroButtons a {
+    width: 100%; /* Make buttons take full width on mobile */
+    display: block; /* Ensure full width is respected */
+  }
+}

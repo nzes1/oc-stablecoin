@@ -12,8 +12,10 @@ import Link from '@docusaurus/Link';
 
 <head>
   <meta property="og:title" content="DSC Protocol Docs" />
-  <meta property="og:image" content="/img/dsc-protocol-preview.png" />
-  <meta property="og:url" content="YOUR_DOCS_URL" />
+  <meta property="og:image" content="https://nzes1.github.io/oc-stablecoin/img/dsc-protocol-preview.png" />
+  <meta property="og:url" content="https://nzes1.github.io/oc-stablecoin/" />
+  <meta name="description" content="A comprehensive documentation site for the DSC Protocol, covering design principles, architecture, ABI, and functionalities." />
+  <meta property="og:description" content="A comprehensive documentation site for the DSC Protocol, covering design principles, architecture, ABI, and functionalities." />
 </head>
 
 <Hero
